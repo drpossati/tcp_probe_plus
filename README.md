@@ -136,7 +136,7 @@ This LKM offers a sysctl interface to configure it.
 
 The following configuration parameters are available:
 
-	ubuntu@host:~$ ls -al /proc/sys/net/lyatiss_cw_tcpprobe/
+	ubuntu@host:~$ ls -al /proc/sys/net/tcpprobe_plus/
 	total 0
 	dr-xr-xr-x 1 root root 0 Mar  6 00:18 .
 	dr-xr-xr-x 1 root root 0 Mar  5 18:55 ..
@@ -159,10 +159,27 @@ This parameter controls the number of probes bufferred in memory.
 
 Example:
 
-	ubuntu@host:~$ more /proc/sys/net/lyatiss_cw_tcpprobe/bufsize
+	ubuntu@host:~$ more /proc/sys/net/tcpprobe_plus/bufsize
 	4096
-	ubuntu@host:~$ sudo sh -c 'echo 1024 > /proc/sys/net/lyatiss_cw_tcpprobe/bufsize'
+	ubuntu@host:~$ sudo sh -c 'echo 1024 > /proc/sys/net/tcpprobe_plus/bufsize'
 	
+
+#### Read number
+
+This parameter controls the minimum number of sampled packets that will be read from the `/proc/net/tcpprobe` buffer.
+
+NOTE: The read will block until the specified number of packets are available.
+
+
+- default is 10 packets
+- x: number of packets to be read at a time
+
+Example:
+
+	ubuntu@host:~$ more /proc/sys/net/tcpprobe_plus/readnum
+	4096
+	ubuntu@host:~$ sudo sh -c 'echo 1024 > /proc/sys/net/tcpprobe_plus/readnum'
+
 
 #### Enable/Disable debug information in kernel messages
 
@@ -174,9 +191,9 @@ This parameter controls the debug level.
 
 Example:
 
-	ubuntu@host:~$ more /proc/sys/net/lyatiss_cw_tcpprobe/debug
+	ubuntu@host:~$ more /proc/sys/net/tcpprobe_plus/debug
 	1
-	ubuntu@host:~$ sudo sh -c 'echo 0 > /proc/sys/net/lyatiss_cw_tcpprobe/debug'
+	ubuntu@host:~$ sudo sh -c 'echo 0 > /proc/sys/net/tcpprobe_plus/debug'
 
 
 #### Sample every ACK packet or only on Congestion Window change
@@ -188,9 +205,9 @@ This parameter determines how ACK packets are sampled.
 
 Example:
 
-	ubuntu@host:~$ more /proc/sys/net/lyatiss_cw_tcpprobe/full
+	ubuntu@host:~$ more /proc/sys/net/tcpprobe_plus/full
 	1
-	ubuntu@host:~$ sudo sh -c 'echo 0 > /proc/sys/net/lyatiss_cw_tcpprobe/full'
+	ubuntu@host:~$ sudo sh -c 'echo 0 > /proc/sys/net/tcpprobe_plus/full'
 
 #### Connection hash table (maxflows/hashsize)
 
@@ -210,9 +227,9 @@ A linked list is used to track flows that hash to the same slot in the hashtable
 
 Example:
 
-	ubuntu@host:~$ more /proc/sys/net/lyatiss_cw_tcpprobe/hashsize
+	ubuntu@host:~$ more /proc/sys/net/tcpprobe_plus/hashsize
 	0
-	ubuntu@host:~$ sudo sh -c 'echo 16384 > /proc/sys/net/lyatiss_cw_tcpprobe/hashsize'
+	ubuntu@host:~$ sudo sh -c 'echo 16384 > /proc/sys/net/tcpprobe_plus/hashsize'
 
 Max flow (see maxflows) has a default value of 2 million flows (2000000).
 
@@ -242,9 +259,9 @@ This parameter controls the maximum number of flows that this module will track.
 
 Example:
 
-	ubuntu@host:~$ more /proc/sys/net/lyatiss_cw_tcpprobe/maxflows
+	ubuntu@host:~$ more /proc/sys/net/tcpprobe_plus/maxflows
 	2000000
-	ubuntu@host:~$ sudo sh -c 'echo 1000000 > /proc/sys/net/lyatiss_cw_tcpprobe/maxflows'
+	ubuntu@host:~$ sudo sh -c 'echo 1000000 > /proc/sys/net/tcpprobe_plus/maxflows'
 
 #### Port filtering
 	
@@ -255,9 +272,9 @@ This parameter controls the port-based filtering of the flows to track.
 
 Example:
 
-	ubuntu@host:~$ more /proc/sys/net/lyatiss_cw_tcpprobe/port
+	ubuntu@host:~$ more /proc/sys/net/tcpprobe_plus/port
 	0
-	ubuntu@host:~$ sudo sh -c 'echo 5001 > /proc/sys/net/lyatiss_cw_tcpprobe/port'
+	ubuntu@host:~$ sudo sh -c 'echo 5001 > /proc/sys/net/tcpprobe_plus/port'
 
 
 #### Probe time
@@ -269,9 +286,9 @@ Upon receiving an ACK, the receive time of the ACK is compared with the receive 
 
 Example:
 
-	ubuntu@host:~$ more /proc/sys/net/lyatiss_cw_tcpprobe/probetime
+	ubuntu@host:~$ more /proc/sys/net/tcpprobe_plus/probetime
 	500
-	ubuntu@host:~$ sudo sh -c 'echo 200 > /proc/sys/net/lyatiss_cw_tcpprobe/probetime'
+	ubuntu@host:~$ sudo sh -c 'echo 200 > /proc/sys/net/tcpprobe_plus/probetime'
 
 
 #### Purge time
@@ -283,16 +300,16 @@ Every `purgetime` the flows that are not active anymore are removed from the flo
 
 Example:
 
-	ubuntu@host:~$ more /proc/sys/net/lyatiss_cw_tcpprobe/purgetime
+	ubuntu@host:~$ more /proc/sys/net/tcpprobe_plus/purgetime
 	500
-	ubuntu@host:~$ sudo sh -c 'echo 200 > /proc/sys/net/lyatiss_cw_tcpprobe/purgetime'
+	ubuntu@host:~$ sudo sh -c 'echo 200 > /proc/sys/net/tcpprobe_plus/purgetime'
 
 
 ### Statistics
 
 This module offers several statistics about its internal behavior.
 
-	ubuntu@host:~$ more /proc/net/stat/lyatiss_cw_tcpprobe
+	ubuntu@host:~$ more /proc/net/stat/tcpprobe_plus
 	Flows: active 4 mem 0K
 	Hash: size 4721 mem 36K
 	cpu# hash_stat: <search_flows found new reset>, ack_drop: <purge_in_progress ring_full>, 

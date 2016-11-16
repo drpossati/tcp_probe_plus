@@ -84,10 +84,10 @@ module_param(debug, int , 0);
 static int purgetime __read_mostly = 300;
 MODULE_PARM_DESC(purgetime, "Max inactivity in seconds before purging a flow (Default 300 seconds)");
 
-#define PROC_TCPPROBE "tcpprobe"
+#define PROC_TCPPROBE "tcpprobe_data"
 
-#define PROC_SYSCTL_TCPPROBE  "lyatiss_cw_tcpprobe"
-#define PROC_STAT_TCPPROBE "lyatiss_cw_tcpprobe"
+#define PROC_SYSCTL_TCPPROBE  "tcpprobe_plus"
+#define PROC_STAT_TCPPROBE "tcpprobe_plus"
 
 #define UINT32_MAX                 (u32)(~((u32) 0)) /* 0xFFFFFFFF         */
 #define UINT16_MAX                  (u16)(~((u16) 0)) /* 0xFFFF         */
