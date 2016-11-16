@@ -57,6 +57,10 @@ static unsigned int bufsize __read_mostly = 4096;
 MODULE_PARM_DESC(bufsize, "Log buffer size in packets (4096)");
 module_param(bufsize, uint, 0);
 
+static unsigned int readnum __read_mostly = 10;
+MODULE_PARM_DESC(readnum, "The number of probes to be read each time (10)");
+module_param(readnum, uint, 0);
+
 static int full __read_mostly;
 MODULE_PARM_DESC(full, "Full log (1=every ack packet received,  0=only cwnd changes)");
 module_param(full, int, 0);
@@ -404,7 +408,7 @@ tcp_flow_find(const struct tcp_tuple *tuple, unsigned int hash)
 	  p->snd_wnd = tp->snd_wnd;
 	  p->ssthresh = ssthresh;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,15,0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
 	  p->srtt = jiffies_to_usecs(tp->srtt) >> 3;
 	  p->rttvar = jiffies_to_usecs(tp->rttvar) >>3;
 #else
@@ -514,17 +518,18 @@ tcp_flow_find(const struct tcp_tuple *tuple, unsigned int hash)
 	  }
 	  tcp_flow->last_seq_num = tp->snd_nxt;
 	  cumulative_bytes = tcp_flow->cumulative_bytes; 
-        
 	}
 
 	//Get the other lock and write
-	spin_lock(&tcp_probe.lock);
-	TCPPROBE_STAT_INC(reset_flows);
-	write_flow(&tuple, tp, tstamp, 
-			   cumulative_bytes, UINT16_MAX, tcp_current_ssthresh(sk), sk, tcp_flow->first_seq_num);
-    
-	spin_unlock(&tcp_probe.lock);
-    
+	if (port == 0 || ntohs(tuple.dport) == port ||
+			ntohs(tuple.sport) == port) {
+		spin_lock(&tcp_probe.lock);
+		TCPPROBE_STAT_INC(reset_flows);
+		write_flow(&tuple, tp, tstamp, 
+				   cumulative_bytes, UINT16_MAX, tcp_current_ssthresh(sk), sk, tcp_flow->first_seq_num);
+		spin_unlock(&tcp_probe.lock);
+	}
+
 	/* Release the flow tuple*/
 	// Remove from Hashtable
 	hlist_del(&tcp_flow->hlist);
@@ -586,7 +591,6 @@ tcp_flow_find(const struct tcp_tuple *tuple, unsigned int hash)
 	  goto skip;
 	}
 	tcp_flow = tcp_flow_find(&tuple, hash);
-        
 	if (!tcp_flow) {
 	  if (maxflows > 0 && atomic_read(&flow_count) >= maxflows) {
 		/* This is DOC attack prevention */
@@ -629,11 +633,9 @@ tcp_flow_find(const struct tcp_tuple *tuple, unsigned int hash)
 		 ntohs(tuple.sport) == port) &&
 		(full || tp->snd_cwnd != tcp_probe.lastcwnd) &&
 		should_write_flow) {
-        
 	  spin_lock(&tcp_probe.lock);
 	  write_flow(&tuple, tp, tstamp, 
 				 cumulative_bytes, length, tcp_current_ssthresh(sk), sk, tcp_flow->first_seq_num);
-        
 	  spin_unlock(&tcp_probe.lock);
 	  wake_up(&tcp_probe.wait);
 		
@@ -673,7 +675,7 @@ tcp_flow_find(const struct tcp_tuple *tuple, unsigned int hash)
 	tcp_probe.head = tcp_probe.tail = 0;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
 	getnstimeofday(&ts);
-    tcp_probe.start = timespec_to_ktime(ts);
+	tcp_probe.start = timespec_to_ktime(ts);
 #else
 	tcp_probe.start = ktime_get();
 #endif
@@ -706,12 +708,13 @@ tcp_flow_find(const struct tcp_tuple *tuple, unsigned int hash)
   {
 	int error = 0;
 	size_t cnt = 0;
+	int toread = readnum;
 
 	if (!buf)
 	  return -EINVAL;
 	PRINT_TRACE("Page size is %lu. Buffer len is %zu.\n", PAGE_SIZE, len);
 
-	while (cnt < len) {
+	while (toread && cnt < len) {
 	  char tbuf[164];
 	  int width;
 
@@ -747,6 +750,7 @@ tcp_flow_find(const struct tcp_tuple *tuple, unsigned int hash)
 		return -EFAULT;
 	  }
 	  cnt += width;
+	  toread--;
 	}
 
 	return cnt == 0 ? error : cnt;
@@ -875,6 +879,14 @@ tcp_flow_find(const struct tcp_tuple *tuple, unsigned int hash)
 	  .data = &purgetime,
 	  .maxlen = sizeof(int),
 	  .proc_handler = &proc_dointvec, 
+	},
+	{
+	  _CTL_NAME(9)
+	  .procname = "readnum",
+	  .mode = 0644,
+	  .data = &readnum,
+	  .maxlen = sizeof(int),
+	  .proc_handler = &proc_dointvec,
 	},
 	{}
   };
