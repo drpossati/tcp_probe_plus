@@ -489,6 +489,8 @@ tcp_flow_find(const struct tcp_tuple *tuple, unsigned int hash)
 	tuple.dport = inet->dport;
 #endif
 	
+	if (port == 0 || ntohs(tuple.dport) == port ||
+			ntohs(tuple.sport) == port) {
 	PRINT_DEBUG("Reset flow src: %pI4 dst: %pI4"
 				" src_port: %u dst_port: %u\n",
 				&tuple.saddr, &tuple.daddr,
@@ -521,14 +523,11 @@ tcp_flow_find(const struct tcp_tuple *tuple, unsigned int hash)
 	}
 
 	//Get the other lock and write
-	if (port == 0 || ntohs(tuple.dport) == port ||
-			ntohs(tuple.sport) == port) {
-		spin_lock(&tcp_probe.lock);
-		TCPPROBE_STAT_INC(reset_flows);
-		write_flow(&tuple, tp, tstamp, 
-				   cumulative_bytes, UINT16_MAX, tcp_current_ssthresh(sk), sk, tcp_flow->first_seq_num);
-		spin_unlock(&tcp_probe.lock);
-	}
+	spin_lock(&tcp_probe.lock);
+	TCPPROBE_STAT_INC(reset_flows);
+	write_flow(&tuple, tp, tstamp, 
+			   cumulative_bytes, UINT16_MAX, tcp_current_ssthresh(sk), sk, tcp_flow->first_seq_num);
+	spin_unlock(&tcp_probe.lock);
 
 	/* Release the flow tuple*/
 	// Remove from Hashtable
@@ -540,6 +539,7 @@ tcp_flow_find(const struct tcp_tuple *tuple, unsigned int hash)
   
 	spin_unlock(&tcp_hash_lock);
 	wake_up(&tcp_probe.wait);
+	}
 
   skip:
 	jprobe_return();
@@ -553,7 +553,6 @@ tcp_flow_find(const struct tcp_tuple *tuple, unsigned int hash)
   static int jtcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 								  struct tcphdr *th, unsigned len)
   {
-  
 	const struct tcp_sock *tp = tcp_sk(sk);
 	const struct inet_sock *inet = inet_sk(sk);
 	int should_write_flow = 0;
@@ -583,6 +582,10 @@ tcp_flow_find(const struct tcp_tuple *tuple, unsigned int hash)
 	tuple.sport = inet->sport;
 	tuple.dport = inet->dport;
 #endif
+	/* Only update if port matches */
+	if ((port == 0 || ntohs(tuple.dport) == port ||
+		ntohs(tuple.sport) == port) &&
+		(full || tp->snd_cwnd != tcp_probe.lastcwnd)) {
 
 	hash = hash_tcp_flow(&tuple);
 	if (spin_trylock(&tcp_hash_lock) == 0) {
@@ -628,11 +631,7 @@ tcp_flow_find(const struct tcp_tuple *tuple, unsigned int hash)
 	  cumulative_bytes = tcp_flow->cumulative_bytes;
 	}
 	
-	/* Only update if port matches */
-	if ((port == 0 || ntohs(tuple.dport) == port ||
-		 ntohs(tuple.sport) == port) &&
-		(full || tp->snd_cwnd != tcp_probe.lastcwnd) &&
-		should_write_flow) {
+	if (should_write_flow) {
 	  spin_lock(&tcp_probe.lock);
 	  write_flow(&tuple, tp, tstamp, 
 				 cumulative_bytes, length, tcp_current_ssthresh(sk), sk, tcp_flow->first_seq_num);
@@ -642,6 +641,7 @@ tcp_flow_find(const struct tcp_tuple *tuple, unsigned int hash)
 	}
 
 	spin_unlock(&tcp_hash_lock);
+	}
 
   skip:
 	jprobe_return();
