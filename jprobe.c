@@ -176,7 +176,8 @@ write_flow(struct tcp_tuple *tuple,
 		p->lost = tp->lost_out;
 		p->retrans = tp->total_retrans;
 		p->inflight = tp->packets_out;
-		p->rto = p->srtt + (4 * p->rttvar);
+		/* p->rto = p->srtt + (4 * p->rttvar); */
+		p->rto = inet_csk(sk)->icsk_rto;
 	
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
 		p->frto_counter = tp->frto_counter;

@@ -119,7 +119,7 @@ The data collected by the LKM is exported through `/proc/net/tcpprobe` and is fo
 | snd_wnd | Receive window size (in number of packets) |
 | srtt | Smoothed rtt (in ms) |
 | rttvar | Standard deviation of the rtt (in ms) |
-| rto | Number of retransmit timeout events |
+| rto | duration of retransmit timeout |
 | lost | Number of lost packets |
 | retrans | Number of retransmitted packets |
 | inflight | Number of packets sent but not yet acked |

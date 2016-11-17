@@ -14,8 +14,6 @@
 #include <linux/swap.h>
 #include <linux/random.h>
 #include <linux/vmalloc.h>
-
-
 #include <net/tcp.h>
 
 #include "tcp_probe_plus.h"
