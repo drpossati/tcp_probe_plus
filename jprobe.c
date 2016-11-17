@@ -141,67 +141,67 @@ void purge_all_flows(void)
    * Assumes that the spin_lock on the tcp_probe has been taken
    * before calling it
    */
-  static int write_flow(
-	  struct tcp_tuple *tuple, const struct tcp_sock *tp, ktime_t tstamp,
-	  u64 cumulative_bytes, u16 length, u32 ssthresh,
-	  struct sock *sk, u64 first_seq_seen
-  ) {
-    
+static int
+write_flow(struct tcp_tuple *tuple,
+		const struct tcp_sock *tp, ktime_t tstamp,
+		u64 cumulative_bytes, u16 length, u32 ssthresh,
+		struct sock *sk, u64 first_seq_seen)
+{
 	/* If log fills, just silently drop */
 	if (tcp_probe_avail() > 1) {
-	  struct tcp_log *p = tcp_probe.log + tcp_probe.head;
-        
-	  p->tstamp = tstamp; 
-	  p->saddr = tuple->saddr;
-	  p->sport = tuple->sport;
-	  p->daddr = tuple->daddr;
-	  p->dport = tuple->dport;
-	  p->length = length;
-	  /* update the cumulative bytes */
-	  p->snd_nxt = cumulative_bytes;
-	  p->snd_una = tp->snd_una;
-	  p->snd_cwnd = tp->snd_cwnd;
-	  p->snd_wnd = tp->snd_wnd;
-	  p->ssthresh = ssthresh;
+		struct tcp_log *p = tcp_probe.log + tcp_probe.head;
 
+		p->tstamp = tstamp; 
+		p->saddr = tuple->saddr;
+		p->sport = tuple->sport;
+		p->daddr = tuple->daddr;
+		p->dport = tuple->dport;
+		p->length = length;
+		/* update the cumulative bytes */
+		p->snd_nxt = cumulative_bytes;
+		p->snd_una = tp->snd_una;
+		p->snd_cwnd = tp->snd_cwnd;
+		p->snd_wnd = tp->snd_wnd;
+		p->ssthresh = ssthresh;
+	
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
-	  p->srtt = jiffies_to_usecs(tp->srtt) >> 3;
-	  p->rttvar = jiffies_to_usecs(tp->rttvar) >>3;
+		p->srtt = jiffies_to_usecs(tp->srtt) >> 3;
+		p->rttvar = jiffies_to_usecs(tp->rttvar) >>3;
 #else
-	  /* element was renamed */ 
-	  p->srtt = tp->srtt_us >> 3;
-	  p->rttvar = tp->rttvar_us >>3;
+		/* element was renamed */ 
+		p->srtt = tp->srtt_us >> 3;
+		p->rttvar = tp->rttvar_us >>3;
 #endif
-
-	  p->lost = tp->lost_out;
-	  p->retrans = tp->total_retrans;
-	  p->inflight = tp->packets_out;
-	  p->rto = p->srtt + (4 * p->rttvar);
-
+	
+		p->lost = tp->lost_out;
+		p->retrans = tp->total_retrans;
+		p->inflight = tp->packets_out;
+		p->rto = p->srtt + (4 * p->rttvar);
+	
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
-	  p->frto_counter = tp->frto_counter;
+		p->frto_counter = tp->frto_counter;
 #else
-	  p->frto_counter = tp->frto;	
-#endif        
-
-	  /* same method as tcp_diag to retrieve the queue sizes */
-	  if (sk->sk_state == TCP_LISTEN) {
-		p->rqueue = sk->sk_ack_backlog;
-		p->wqueue = sk->sk_max_ack_backlog;
-	  } else {
-		p->rqueue = max_t(int, tp->rcv_nxt - tp->copied_seq, 0);
-		p->wqueue = tp->write_seq - tp->snd_una;
-	  }
-
-	  p->socket_idf = first_seq_seen;
-
-	  tcp_probe.head = (tcp_probe.head + 1) & (bufsize - 1);
+		p->frto_counter = tp->frto;	
+#endif
+	
+		/* same method as tcp_diag to retrieve the queue sizes */
+		if (sk->sk_state == TCP_LISTEN) {
+			p->rqueue = sk->sk_ack_backlog;
+			p->wqueue = sk->sk_max_ack_backlog;
+		} else {
+			p->rqueue = max_t(int, tp->rcv_nxt - tp->copied_seq, 0);
+			p->wqueue = tp->write_seq - tp->snd_una;
+		}
+		
+		p->socket_idf = first_seq_seen;
+		
+		tcp_probe.head = (tcp_probe.head + 1) & (bufsize - 1);
 	} else {
-	  TCPPROBE_STAT_INC(ack_drop_ring_full);
+		TCPPROBE_STAT_INC(ack_drop_ring_full);
 	}
 	tcp_probe.lastcwnd = tp->snd_cwnd;
 	return 0;
-  }
+}
 
 
 
@@ -261,9 +261,10 @@ void jtcp_done(struct sock *sk)
 		if (!tcp_flow) {
 			/*We just saw the FIN for this one so we can probably forget it */
 			PRINT_DEBUG("FIN for flow src: %pI4 dst: %pI4"
-			" src_port: %u dst_port: %u but no corresponding hash\n",
-			&tuple.saddr, &tuple.daddr,
-			ntohs(tuple.sport), ntohs(tuple.dport));
+				" src_port: %u dst_port: %u but no corresponding hash\n",
+				&tuple.saddr, &tuple.daddr,
+				ntohs(tuple.sport), ntohs(tuple.dport)
+			);
 			spin_unlock(&tcp_hash_lock);
 			goto skip;
 		} else {
@@ -367,10 +368,12 @@ int jtcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 					"Init new flow src: %pI4 dst: %pI4"
 					" src_port: %u dst_port: %u\n",
 					&tuple.saddr, &tuple.daddr,
-					ntohs(tuple.sport), ntohs(tuple.dport));
-					tcp_flow = init_tcp_hash_flow(&tuple, tstamp, hash);
-					tcp_flow->first_seq_num = tp->snd_nxt; 
-					should_write_flow = 1;
+					ntohs(tuple.sport), ntohs(tuple.dport)
+				);
+				tcp_flow = init_tcp_hash_flow(&tuple, tstamp, hash);
+				tcp_flow->first_seq_num = tp->snd_nxt; 
+				tcp_flow->tstamp = tstamp;
+				should_write_flow = 1;
 			}
 		} else {
 		/* if the difference between timestamps is >= probetime then write the flow to ring */
