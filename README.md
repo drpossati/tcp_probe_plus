@@ -281,7 +281,7 @@ Example:
 	
 Upon receiving an ACK, the receive time of the ACK is compared with the receive time of the previous ACK for the connection. If the time difference is equal to or more than the probe time, then this ACK is eligible to be written to `/proc/net/tcpprobe`. The probe time is configurable from user space. The default probe time is 500 ms. This value could be passed as a module initialization parameter or changed using this parameter.
 
-- default is 500 ms
+- default is 0 ms
 - x: sampling interval
 
 Example:
