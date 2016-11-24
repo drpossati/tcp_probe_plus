@@ -1,5 +1,13 @@
 # tcp_probe_plus Linux Kernel Module
 
+## TODO
+
+- [ ] Detect Timeout
+- [ ] Get `User Agent` for receive packets
+- [ ] Detect Retransmissions
+- [ ] Probe packets on connection setup
+- [ ] Calculate RTT using packet's timestamp
+
 ## License
 Please review the:
 - "LICENSE" file that is part of this distribution and in the same directory as this file
@@ -117,9 +125,9 @@ The data collected by the LKM is exported through `/proc/net/tcpprobe` and is fo
 | snd_cwnd | Current congestion window size (in number of packets) |
 | ssthresh | Slow-start threshold (in number of packets) |
 | snd_wnd | Receive window size (in number of packets) |
-| srtt | Smoothed rtt (in ms) |
+| srtt | Smoothed rtt (in us) |
 | rttvar | Standard deviation of the rtt (in ms) |
-| rto | duration of retransmit timeout |
+| rto | duration of retransmit timeout (in ms) |
 | lost | Number of lost packets |
 | retrans | Number of retransmitted packets |
 | inflight | Number of packets sent but not yet acked |
