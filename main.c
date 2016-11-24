@@ -21,7 +21,7 @@
 
 static struct ctl_table_header *tcpprobe_sysctl_header;
 
-static struct jprobe tcp_jprobe = {
+static struct jprobe tcp_jprobe_recv = {
 	.kp = {
 		.symbol_name	= "tcp_rcv_established",
 	},
@@ -34,6 +34,13 @@ static struct jprobe tcp_jprobe_done = {
 		.symbol_name = "tcp_done",
 	},
 	.entry = (kprobe_opcode_t *) jtcp_done,
+};
+
+static struct jprobe tcp_jprobe_send = {
+	.kp = {
+		.symbol_name = "tcp_transmit_skb",
+	},
+	.entry = (kprobe_opcode_t *) jtcp_transmit_skb,
 };
 
 static struct hlist_head * alloc_hashtable(int size)
@@ -143,7 +150,13 @@ static __init int tcpprobe_init(void)
 		goto err_free_proc_stat;
 	}
 
-	ret = register_jprobe(&tcp_jprobe);
+	ret = register_jprobe(&tcp_jprobe_recv);
+	if (ret) {
+		pr_err("Unable to register jprobe.\n");
+		goto err1;
+	}
+
+	ret = register_jprobe(&tcp_jprobe_send);
 	if (ret) {
 		pr_err("Unable to register jprobe.\n");
 		goto err1;
@@ -169,7 +182,7 @@ static __init int tcpprobe_init(void)
 	PRINT_DEBUG("Sizes tcp_log = %zu\n", sizeof (struct tcp_log));
 	return 0;
 err_tcpdone:
-	unregister_jprobe(&tcp_jprobe);
+	unregister_jprobe(&tcp_jprobe_recv);
 err1:
 	remove_proc_entry(PROC_TCPPROBE, INIT_NET(proc_net));
 err_free_proc_stat:
@@ -191,7 +204,8 @@ static __exit void tcpprobe_exit(void)
 	remove_proc_entry(PROC_TCPPROBE, INIT_NET(proc_net));
 	remove_proc_entry(PROC_STAT_TCPPROBE, INIT_NET(proc_net_stat));
 	unregister_sysctl_table(tcpprobe_sysctl_header);
-	unregister_jprobe(&tcp_jprobe);
+	unregister_jprobe(&tcp_jprobe_recv);
+	unregister_jprobe(&tcp_jprobe_send);
 
 #if LINUX_VERSION_CODE >=  KERNEL_VERSION(2,6,22)	
 	unregister_jprobe(&tcp_jprobe_done);

@@ -170,7 +170,7 @@ write_flow(struct tcp_tuple *tuple,
 #else
 		/* element was renamed */ 
 		p->srtt = tp->srtt_us >> 3;
-		p->rttvar = tp->rttvar_us >>3;
+		p->rttvar = tp->rttvar_us >> 3;
 #endif
 	
 		p->lost = tp->lost_out;
@@ -348,11 +348,12 @@ int jtcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 		(full || tp->snd_cwnd != tcp_probe.lastcwnd)
 	) {
 		hash = hash_tcp_flow(&tuple);
-		if (spin_trylock(&tcp_hash_lock) == 0) {
-			/* Purge is ongoing.. skip this ACK  */
-			TCPPROBE_STAT_INC(ack_drop_purge);
-			goto skip;
-		}
+		spin_lock(&tcp_hash_lock);
+		//if (spin_trylock(&tcp_hash_lock) == 0) {
+		//	/* Purge is ongoing.. skip this ACK  */
+		//	TCPPROBE_STAT_INC(ack_drop_purge);
+		//	goto skip;
+		//}
 		tcp_flow = tcp_flow_find(&tuple, hash);
 		if (!tcp_flow) {
 			if (
@@ -410,4 +411,107 @@ int jtcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 skip:
 	jprobe_return();
 	return 0;
+}
+
+/*
+* Hook inserted to be called before each sent packet.
+* Note: arguments must match tcp_transmit_skb()!
+*/
+void jtcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it,
+				gfp_t gfp_mask)
+{
+	const struct tcp_sock *tp = tcp_sk(sk);
+	const struct inet_sock *inet = inet_sk(sk);
+	int should_write_flow = 0;
+	u16 length = skb->len;
+	struct tcp_tuple tuple;
+	struct tcp_hash_flow *tcp_flow;
+	unsigned int hash;
+	u64 cumulative_bytes = 0;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
+	struct timespec ts; 
+	ktime_t tstamp;
+	getnstimeofday(&ts);
+	tstamp = timespec_to_ktime(ts);
+#else
+	ktime_t tstamp = ktime_get();
+#endif
+
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,32)
+	tuple.saddr = inet->inet_saddr;
+	tuple.daddr = inet->inet_daddr;
+	tuple.sport = inet->inet_sport;
+	tuple.dport = inet->inet_dport;
+#else
+	tuple.saddr = inet->saddr;
+	tuple.daddr = inet->daddr;
+	tuple.sport = inet->sport;
+	tuple.dport = inet->dport;
+#endif
+
+	/* Only update if port or skb mark matches */
+	if ((port == 0 ||
+	     ntohs(inet->inet_dport) == port ||
+	     ntohs(inet->inet_sport) == port) &&
+	    (full || tp->snd_cwnd != tcp_probe.lastcwnd)) {
+
+		hash = hash_tcp_flow(&tuple);
+		spin_lock(&tcp_hash_lock);
+		tcp_flow = tcp_flow_find(&tuple, hash);
+		if (!tcp_flow) {
+			/* The number of monitor flows reaches its maximum */
+			if ( maxflows > 0 &&
+				atomic_read(&flow_count) >= maxflows
+			) {
+				/* This is DOC attack prevention */
+				TCPPROBE_STAT_INC(conn_maxflow_limit);
+				PRINT_DEBUG("Flow count = %u execeed max flow = %u\n", 
+				atomic_read(&flow_count), maxflows);
+			} else {
+				/* create an entry in hashtable */
+				PRINT_DEBUG(
+					"Init new flow src: %pI4 dst: %pI4"
+					" src_port: %u dst_port: %u\n",
+					&tuple.saddr, &tuple.daddr,
+					ntohs(tuple.sport), ntohs(tuple.dport)
+				);
+				tcp_flow = init_tcp_hash_flow(&tuple, tstamp, hash);
+				tcp_flow->first_seq_num = tp->snd_nxt; 
+				tcp_flow->tstamp = tstamp;
+				should_write_flow = 1;
+			}
+		} else {
+		/* if the difference between timestamps is >= probetime then write the flow to ring */
+			struct timespec tv = ktime_to_timespec(ktime_sub(tstamp, tcp_flow->tstamp));	
+			u_int64_t milliseconds = (tv.tv_sec * MSEC_PER_SEC) + (tv.tv_nsec/NSEC_PER_MSEC);
+			if (milliseconds >= probetime) { 
+				tcp_flow->tstamp = tstamp;
+				should_write_flow = 1;
+			}
+		}
+		if (should_write_flow) {
+			if (tp->snd_nxt > tcp_flow->last_seq_num) {
+				tcp_flow->cumulative_bytes += (tp->snd_nxt - tcp_flow->last_seq_num);
+			} else if (tp->snd_nxt != tcp_flow->last_seq_num) { /* Retransmits */
+				/* sequence number rollover. For 10 Gbits/sec flow this will
+				happen every 4 seconds */
+				tcp_flow->cumulative_bytes += ((UINT32_MAX - tcp_flow->last_seq_num) + tp->snd_nxt);
+			}
+			tcp_flow->last_seq_num = tp->snd_nxt;
+			cumulative_bytes = tcp_flow->cumulative_bytes;
+
+			spin_lock(&tcp_probe.lock);
+			write_flow(
+				&tuple, tp, tstamp, cumulative_bytes, length,
+				tcp_current_ssthresh(sk), sk,
+				tcp_flow->first_seq_num
+			);
+			spin_unlock(&tcp_probe.lock);
+			wake_up(&tcp_probe.wait);
+		}
+		spin_unlock(&tcp_hash_lock);
+	}
+	jprobe_return();
+	return ;
 }

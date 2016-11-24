@@ -45,12 +45,12 @@ static int tcpprobe_sprint(char *tbuf, int n)
 	
 	return scnprintf(
 		tbuf, n,
-		"%lu.%09lu %pI4:%u %pI4:%u %u %u %u %u %u %u %u %u %u\n",
-		(unsigned long) tv.tv_sec, (unsigned long) tv.tv_nsec,
+		"%lu.%09lu %pI4:%u %pI4:%u %u %u %u %u %u %u %u %u %u %u\n",
+		(unsigned long) tv.tv_sec, (unsigned long) tv.tv_nsec / 1000,
 		&p->saddr, ntohs(p->sport),
 		&p->daddr, ntohs(p->dport),
 		p->snd_cwnd, p->ssthresh, p->snd_wnd, p->srtt,
-		p->rttvar, p->rto, p->lost, p->retrans, p->inflight
+		p->rttvar, p->rto, p->lost, p->retrans, p->inflight, p->length
 	);
 	/*return scnprintf(tbuf, n,
 	"%lu.%09lu %pI4:%u %pI4:%u %d %#llx %#x %u %u %u %u %u %u %u %u %u %u %u %u %#llx\n",
@@ -64,10 +64,8 @@ static int tcpprobe_sprint(char *tbuf, int n)
 	p->rqueue, p->wqueue, p->socket_idf);*/
 }
 
-static ssize_t tcpprobe_read(
-	struct file *file, char __user *buf,
-	size_t len, loff_t *ppos
-)
+static ssize_t tcpprobe_read(struct file *file, char __user *buf,
+						size_t len, loff_t *ppos)
 {
 	int error = 0;
 	size_t cnt = 0;

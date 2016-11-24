@@ -159,6 +159,8 @@ u_int32_t hash_tcp_flow(const struct tcp_tuple *tuple);
 
 void jtcp_done(struct sock *sk);
 int jtcp_rcv_established(struct sock *sk, struct sk_buff *skb, struct tcphdr *th, unsigned len);
+void jtcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it,
+				gfp_t gfp_mask);
 
 void purge_timer_run(unsigned long dummy);
 void purge_all_flows(void);
