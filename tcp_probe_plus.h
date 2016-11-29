@@ -26,6 +26,8 @@
 #define pr_err(fmt, arg...) pr_info(fmt, ##arg)
 #endif
 
+#define MAX_AGENT_LEN 128
+
 struct tcp_tuple {
 	__be32 saddr;
 	__be32 daddr;
@@ -50,6 +52,7 @@ struct tcp_hash_flow {
 	/* remember last sequence number */
 	u32 last_seq_num;
 	u64 first_seq_num;
+	char user_agent[MAX_AGENT_LEN];
 };
 
 /* statistics */
@@ -69,6 +72,8 @@ struct tcpprobe_stat {
 #define TCPPROBE_STAT_INC(count) (__get_cpu_var(tcpprobe_stat).count++)
 
 struct tcp_log {
+	/* log type: recv(0), send(1), timeout(2), connection setup(3), tcp_done(4)*/
+	int type;
 	ktime_t tstamp;
 	__be32	saddr, daddr;
 	__be16	sport, dport;
@@ -79,6 +84,7 @@ struct tcp_log {
 	u32 snd_cwnd;
 	u32 ssthresh;
 	u32 srtt;
+	u32 mdev;
 	u32 rttvar;
 	u32 lost;
 	u32 retrans;
@@ -88,6 +94,7 @@ struct tcp_log {
 	u32 rqueue;
 	u32 wqueue;
 	u64 socket_idf;
+	char user_agent[MAX_AGENT_LEN];
 };
 
 struct tcp_probe_list {

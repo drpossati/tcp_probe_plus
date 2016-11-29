@@ -142,15 +142,16 @@ void purge_all_flows(void)
    * before calling it
    */
 static int
-write_flow(struct tcp_tuple *tuple,
-		const struct tcp_sock *tp, ktime_t tstamp,
-		u64 cumulative_bytes, u16 length, u32 ssthresh,
-		struct sock *sk, u64 first_seq_seen)
+write_flow(int type, struct tcp_hash_flow *tcp_flow, struct tcp_tuple *tuple, ktime_t tstamp,
+		u64 cumulative_bytes, u16 length, struct sock *sk)
 {
+	const struct tcp_sock *tp = tcp_sk(sk);
+	int i=0;
 	/* If log fills, just silently drop */
 	if (tcp_probe_avail() > 1) {
 		struct tcp_log *p = tcp_probe.log + tcp_probe.head;
-
+		
+		p->type = type;
 		p->tstamp = tstamp; 
 		p->saddr = tuple->saddr;
 		p->sport = tuple->sport;
@@ -162,15 +163,17 @@ write_flow(struct tcp_tuple *tuple,
 		p->snd_una = tp->snd_una;
 		p->snd_cwnd = tp->snd_cwnd;
 		p->snd_wnd = tp->snd_wnd;
-		p->ssthresh = ssthresh;
+		p->ssthresh = tcp_current_ssthresh(sk);
 	
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
 		p->srtt = jiffies_to_usecs(tp->srtt) >> 3;
-		p->rttvar = jiffies_to_usecs(tp->rttvar) >>3;
+		p->rttvar = jiffies_to_usecs(tp->rttvar) >> 2;
+		p->mdev = jiffies_to_usecs(tp->mdev) >> 2;
 #else
 		/* element was renamed */ 
 		p->srtt = tp->srtt_us >> 3;
-		p->rttvar = tp->rttvar_us >> 3;
+		p->rttvar = tp->rttvar_us >> 2;
+		p->mdev = tp->mdev_us >> 2;
 #endif
 	
 		p->lost = tp->lost_out;
@@ -194,8 +197,11 @@ write_flow(struct tcp_tuple *tuple,
 			p->wqueue = tp->write_seq - tp->snd_una;
 		}
 		
-		p->socket_idf = first_seq_seen;
-		
+		p->socket_idf = tcp_flow->first_seq_num;
+		while (tcp_flow->user_agent[i]) {
+			p->user_agent[i] = tcp_flow->user_agent[i];
+			i++;
+		}
 		tcp_probe.head = (tcp_probe.head + 1) & (bufsize - 1);
 	} else {
 		TCPPROBE_STAT_INC(ack_drop_ring_full);
@@ -284,8 +290,7 @@ void jtcp_done(struct sock *sk)
 		// Get the other lock and write
 		spin_lock(&tcp_probe.lock);
 		TCPPROBE_STAT_INC(reset_flows);
-		write_flow(&tuple, tp, tstamp, 
-		cumulative_bytes, UINT16_MAX, tcp_current_ssthresh(sk), sk, tcp_flow->first_seq_num);
+		write_flow(4, tcp_flow, &tuple, tstamp, cumulative_bytes, 0, sk);
 		spin_unlock(&tcp_probe.lock);
 		
 		/* Release the flow tuple*/
@@ -303,6 +308,54 @@ void jtcp_done(struct sock *sk)
 skip:
 	jprobe_return();
 	return;
+}
+
+/* 
+ * Get user agent from skb buffer and store into into buff
+ * Paras:
+ *	skb: skb_buff
+ *	buff: user agent to put in
+ *	buflen: length of buff
+ * Returns:
+ *  0: found
+ *  1: not found
+ *  -1: found but too long to put into buff
+ */
+static inline int
+get_user_agent(struct sk_buff *skb, char *buff, unsigned buflen) {
+	unsigned int i = 0, j = 0;
+	unsigned int tcphdr_len = skb->data[12] >> 2;
+	unsigned char* payload = skb->data + tcphdr_len;
+	unsigned int payload_len = skb->len - skb->data_len - tcphdr_len;
+	if (payload_len > 20 &&
+		((payload[0] == 'G' && payload[1] == 'E' && payload[2] == 'T') ||
+		 (payload[0] == 'P' && payload[1] == 'O' && payload[2] == 'S' && payload[3] == 'T'))) {
+		/* this is a http header */
+		while (i+11 < payload_len) {
+			if (payload[i+0] == 'U' && payload[i+1] == 's' && payload[i+2] == 'e' &&
+				payload[i+3] == 'r' && payload[i+5] == 'A' && payload[i+6] == 'g') {
+				/* Find User Agent */
+				i += 11;
+				while (i+j < payload_len && j < buflen &&
+					payload[i+j] != 0x0d && payload[i+j] != 0x0a) {
+					/* Lets get the user agent*/
+					buff[j] = payload[i+j];
+					j++;
+				}
+				buff[j] = '\0';
+				break;
+			} else {
+				while (i < payload_len && payload[i] != 0x0d && payload[i] != 0x0a) {
+					i++;
+				}
+				if (likely(payload[i] == 0x0a || payload[i] == 0x0d)) {
+					i++;
+				}
+			}
+		}
+
+	}
+	return 0;
 }
 
 /*
@@ -375,6 +428,7 @@ int jtcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 				tcp_flow = init_tcp_hash_flow(&tuple, tstamp, hash);
 				tcp_flow->first_seq_num = tp->snd_nxt; 
 				tcp_flow->tstamp = tstamp;
+				tcp_flow->user_agent[0] = '\0';
 				should_write_flow = 1;
 			}
 		} else {
@@ -387,6 +441,7 @@ int jtcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 			}
 		}
 		if (should_write_flow) {
+			get_user_agent(skb, tcp_flow->user_agent, MAX_AGENT_LEN-1);
 			if (tp->snd_nxt > tcp_flow->last_seq_num) {
 				tcp_flow->cumulative_bytes += (tp->snd_nxt - tcp_flow->last_seq_num);
 			} else if (tp->snd_nxt != tcp_flow->last_seq_num) { /* Retransmits */
@@ -398,11 +453,7 @@ int jtcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 			cumulative_bytes = tcp_flow->cumulative_bytes;
 
 			spin_lock(&tcp_probe.lock);
-			write_flow(
-				&tuple, tp, tstamp, cumulative_bytes, length,
-				tcp_current_ssthresh(sk), sk,
-				tcp_flow->first_seq_num
-			);
+			write_flow(0, tcp_flow, &tuple, tstamp, cumulative_bytes, length, sk);
 			spin_unlock(&tcp_probe.lock);
 			wake_up(&tcp_probe.wait);
 		}
@@ -502,11 +553,7 @@ void jtcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it,
 			cumulative_bytes = tcp_flow->cumulative_bytes;
 
 			spin_lock(&tcp_probe.lock);
-			write_flow(
-				&tuple, tp, tstamp, cumulative_bytes, length,
-				tcp_current_ssthresh(sk), sk,
-				tcp_flow->first_seq_num
-			);
+			write_flow(1, tcp_flow, &tuple, tstamp, cumulative_bytes, length, sk);
 			spin_unlock(&tcp_probe.lock);
 			wake_up(&tcp_probe.wait);
 		}

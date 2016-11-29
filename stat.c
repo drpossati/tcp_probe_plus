@@ -43,7 +43,7 @@ static int tcpprobe_sprint(char *tbuf, int n)
 	const struct tcp_log *p = tcp_probe.log + tcp_probe.tail;
 	struct timespec tv = ktime_to_timespec(ktime_sub(p->tstamp, tcp_probe.start));
 	
-	return scnprintf(
+	/*return scnprintf(
 		tbuf, n,
 		"%lu.%09lu %pI4:%u %pI4:%u %u %u %u %u %u %u %u %u %u %u\n",
 		(unsigned long) tv.tv_sec, (unsigned long) tv.tv_nsec / 1000,
@@ -51,17 +51,16 @@ static int tcpprobe_sprint(char *tbuf, int n)
 		&p->daddr, ntohs(p->dport),
 		p->snd_cwnd, p->ssthresh, p->snd_wnd, p->srtt,
 		p->rttvar, p->rto, p->lost, p->retrans, p->inflight, p->length
-	);
-	/*return scnprintf(tbuf, n,
-	"%lu.%09lu %pI4:%u %pI4:%u %d %#llx %#x %u %u %u %u %u %u %u %u %u %u %u %u %#llx\n",
-	(unsigned long) tv.tv_sec,
-	(unsigned long) tv.tv_nsec,
-	&p->saddr, ntohs(p->sport),
-	&p->daddr, ntohs(p->dport),
+	);*/
+	return scnprintf(tbuf, n,
+	"%d %lu.%09lu %pI4:%u %pI4:%u %d %#llx %#x %u %u %u %u %u %u %u %u %u %u %u %u %u %#llx %s\n",
+	p->type,
+	(unsigned long) tv.tv_sec, (unsigned long) tv.tv_nsec,
+	&p->saddr, ntohs(p->sport), &p->daddr, ntohs(p->dport),
 	p->length, p->snd_nxt, p->snd_una,
-	p->snd_cwnd, p->ssthresh, p->snd_wnd, p->srtt,
-	p->rttvar, p->rto, p->lost, p->retrans, p->inflight, p->frto_counter,
-	p->rqueue, p->wqueue, p->socket_idf);*/
+	p->snd_cwnd, p->ssthresh, p->snd_wnd, p->srtt, p->rttvar, p->mdev, p->rto,
+	p->lost, p->retrans, p->inflight, p->frto_counter,
+	p->rqueue, p->wqueue, p->socket_idf, p->user_agent);
 }
 
 static ssize_t tcpprobe_read(struct file *file, char __user *buf,
@@ -76,7 +75,7 @@ static ssize_t tcpprobe_read(struct file *file, char __user *buf,
 	PRINT_TRACE("Page size is %lu. Buffer len is %zu.\n", PAGE_SIZE, len);
 	
 	while (toread && cnt < len) {
-		char tbuf[164];
+		char tbuf[512];
 		int width;
 		
 		/* Wait for data in buffer */

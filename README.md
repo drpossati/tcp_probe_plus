@@ -126,15 +126,16 @@ The data collected by the LKM is exported through `/proc/net/tcpprobe` and is fo
 | ssthresh | Slow-start threshold (in number of packets) |
 | snd_wnd | Receive window size (in number of packets) |
 | srtt | Smoothed rtt (in us) |
-| rttvar | Standard deviation of the rtt (in ms) |
+| mdev | Medium deviation of rtt (in us) |
+| rttvar | Standard deviation of the rtt (in us) |
 | rto | duration of retransmit timeout (in ms) |
-| lost | Number of lost packets |
-| retrans | Number of retransmitted packets |
+| lost | (estimated) Number of lost packets currently. |
+| retrans | Total number of retransmitted packets |
 | inflight | Number of packets sent but not yet acked |
-| frto_counter | Number of spurious RTO events |
+| frto_counter | Number of spurious RTO events (After linux 3.10.0, this value is never a counter) |
 | rqueue | Number of bytes in the socket read queue |
 | wqueue | Number of bytes in the socket write queue |
-| socket_idf | First sequence number seen for the connection |  
+| socket_idf | First sequence number seen for the connection |
  
 ## Sysctl interface
 
