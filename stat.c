@@ -53,7 +53,7 @@ static int tcpprobe_sprint(char *tbuf, int n)
 		p->rttvar, p->rto, p->lost, p->retrans, p->inflight, p->length
 	);*/
 	return scnprintf(tbuf, n,
-	"%d %lu.%09lu %pI4:%u %pI4:%u %d %#llx %#x %u %u %u %u %u %u %u %u %u %u %u %u %u %u %#llx \"%s\"\n",
+	"%d %lu.%09lu %pI4:%u %pI4:%u %d %#llx %#x %u %u %u %u %u %u %u %u %u %u %u %u %u %u %#llx %s\n",
 	p->type,
 	(unsigned long) tv.tv_sec, (unsigned long) tv.tv_nsec,
 	&p->saddr, ntohs(p->sport), &p->daddr, ntohs(p->dport),

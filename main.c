@@ -193,8 +193,11 @@ static __init int tcpprobe_init(void)
 	sizeof(struct hlist_node), sizeof(struct list_head), sizeof(ktime_t), sizeof(struct tcp_tuple));
 	PRINT_DEBUG("Sizes tcp_log = %zu\n", sizeof (struct tcp_log));
 	return 0;
+
 err_tcpdone:
 	unregister_jprobe(&tcp_jprobe_recv);
+	unregister_jprobe(&tcp_jprobe_send);
+	unregister_jprobe(&tcp_jprobe_rto_timeout);
 err1:
 	remove_proc_entry(PROC_TCPPROBE, INIT_NET(proc_net));
 err_free_proc_stat:
@@ -218,6 +221,7 @@ static __exit void tcpprobe_exit(void)
 	unregister_sysctl_table(tcpprobe_sysctl_header);
 	unregister_jprobe(&tcp_jprobe_recv);
 	unregister_jprobe(&tcp_jprobe_send);
+	unregister_jprobe(&tcp_jprobe_rto_timeout);
 
 #if LINUX_VERSION_CODE >=  KERNEL_VERSION(2,6,22)	
 	unregister_jprobe(&tcp_jprobe_done);
