@@ -196,8 +196,9 @@ write_flow(int type, struct tcp_hash_flow *tcp_flow, struct tcp_tuple *tuple, kt
 			p->rqueue = max_t(int, tp->rcv_nxt - tp->copied_seq, 0);
 			p->wqueue = tp->write_seq - tp->snd_una;
 		}
-		
 		p->socket_idf = tcp_flow->first_seq_num;
+
+		p->rto_num = tcp_flow->rto_num;
 		while (tcp_flow->user_agent[i]) {
 			p->user_agent[i] = tcp_flow->user_agent[i];
 			i++;
@@ -428,6 +429,7 @@ int jtcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 				tcp_flow = init_tcp_hash_flow(&tuple, tstamp, hash);
 				tcp_flow->first_seq_num = tp->snd_nxt; 
 				tcp_flow->tstamp = tstamp;
+				tcp_flow->rto_num = 0;
 				tcp_flow->user_agent[0] = '\0';
 				should_write_flow = 1;
 			}
@@ -512,9 +514,8 @@ void jtcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it,
 		tcp_flow = tcp_flow_find(&tuple, hash);
 		if (!tcp_flow) {
 			/* The number of monitor flows reaches its maximum */
-			if ( maxflows > 0 &&
-				atomic_read(&flow_count) >= maxflows
-			) {
+			if (maxflows > 0 &&
+				atomic_read(&flow_count) >= maxflows) {
 				/* This is DOC attack prevention */
 				TCPPROBE_STAT_INC(conn_maxflow_limit);
 				PRINT_DEBUG("Flow count = %u execeed max flow = %u\n", 
@@ -530,6 +531,8 @@ void jtcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it,
 				tcp_flow = init_tcp_hash_flow(&tuple, tstamp, hash);
 				tcp_flow->first_seq_num = tp->snd_nxt; 
 				tcp_flow->tstamp = tstamp;
+				tcp_flow->rto_num = 0;
+				tcp_flow->user_agent[0] = '\0';
 				should_write_flow = 1;
 			}
 		} else {
@@ -561,4 +564,79 @@ void jtcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it,
 	}
 	jprobe_return();
 	return ;
+}
+
+/*
+* Hook inserted to be called before each sent packet.
+* Note: arguments must match tcp_transmit_skb()!
+*/
+void jtcp_retransmit_timer(struct sock *sk)
+{
+	const struct inet_sock *inet = inet_sk(sk);
+	struct tcp_tuple tuple;
+	struct tcp_hash_flow *tcp_flow;
+	unsigned int hash;
+	ktime_t tstamp;
+
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
+	struct timespec ts; 
+	getnstimeofday(&ts);
+	tstamp = timespec_to_ktime(ts);
+#else
+	tstamp = ktime_get();
+#endif
+
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,32)
+	tuple.saddr = inet->inet_saddr;
+	tuple.daddr = inet->inet_daddr;
+	tuple.sport = inet->inet_sport;
+	tuple.dport = inet->inet_dport;
+#else
+	tuple.saddr = inet->saddr;
+	tuple.daddr = inet->daddr;
+	tuple.sport = inet->sport;
+	tuple.dport = inet->dport;
+#endif
+
+	if (port == 0 || ntohs(tuple.dport) == port ||
+		ntohs(tuple.sport) == port) {
+		PRINT_DEBUG(
+			"RTO Timeout src: %pI4 dst: %pI4"
+			" src_port: %u dst_port: %u\n",
+			&tuple.saddr, &tuple.daddr,
+			ntohs(tuple.sport), ntohs(tuple.dport)
+		);
+	
+		hash = hash_tcp_flow(&tuple);
+		/* Making sure that we are the only one touching this flow */
+		spin_lock(&tcp_hash_lock);
+		
+		tcp_flow = tcp_flow_find(&tuple, hash);
+		if (!tcp_flow) {
+			/*We just saw the FIN for this one so we can probably forget it */
+			PRINT_DEBUG("RTO timeout for flow src: %pI4 dst: %pI4"
+				" src_port: %u dst_port: %u but no corresponding hash\n",
+				&tuple.saddr, &tuple.daddr,
+				ntohs(tuple.sport), ntohs(tuple.dport)
+			);
+			spin_unlock(&tcp_hash_lock);
+			goto skip;
+		} else {
+			/*Retrieve the last value of the cumulative_bytes */
+			tcp_flow->rto_num ++;
+		}
+		
+		// Get the other lock and write
+		spin_lock(&tcp_probe.lock);
+		write_flow(5, tcp_flow, &tuple, tstamp, 0, 0, sk);
+		spin_unlock(&tcp_probe.lock);
+		
+		spin_unlock(&tcp_hash_lock);
+		wake_up(&tcp_probe.wait);
+	}
+	
+skip:
+	jprobe_return();
+	return;
 }

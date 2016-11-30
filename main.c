@@ -42,6 +42,12 @@ static struct jprobe tcp_jprobe_send = {
 	},
 	.entry = (kprobe_opcode_t *) jtcp_transmit_skb,
 };
+static struct jprobe tcp_jprobe_rto_timeout = {
+	.kp = {
+		.symbol_name = "tcp_retransmit_timer",
+	},
+	.entry = (kprobe_opcode_t *) jtcp_retransmit_timer,
+};
 
 static struct hlist_head * alloc_hashtable(int size)
 {
@@ -152,14 +158,20 @@ static __init int tcpprobe_init(void)
 
 	ret = register_jprobe(&tcp_jprobe_recv);
 	if (ret) {
-		pr_err("Unable to register jprobe.\n");
+		pr_err("Unable to register jprobe on tcp_rcv_established.\n");
 		goto err1;
 	}
 
 	ret = register_jprobe(&tcp_jprobe_send);
 	if (ret) {
-		pr_err("Unable to register jprobe.\n");
+		pr_err("Unable to register jprobe on tcp_transmit_skb.\n");
 		goto err1;
+	}
+
+	ret = register_jprobe(&tcp_jprobe_rto_timeout);
+	if (ret) {
+		pr_err("Unable to register jprobe on tcp_retransmit_timer.\n");
+		goto err_tcpdone;
 	}
 
 

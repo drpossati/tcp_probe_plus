@@ -52,6 +52,7 @@ struct tcp_hash_flow {
 	/* remember last sequence number */
 	u32 last_seq_num;
 	u64 first_seq_num;
+	unsigned rto_num; /* # of retransmit timeout */
 	char user_agent[MAX_AGENT_LEN];
 };
 
@@ -72,7 +73,7 @@ struct tcpprobe_stat {
 #define TCPPROBE_STAT_INC(count) (__get_cpu_var(tcpprobe_stat).count++)
 
 struct tcp_log {
-	/* log type: recv(0), send(1), timeout(2), connection setup(3), tcp_done(4)*/
+	/* log type: recv(0), send(1), timeout(2), connection setup(3), tcp_done(4), RTO timeout(5)*/
 	int type;
 	ktime_t tstamp;
 	__be32	saddr, daddr;
@@ -94,6 +95,7 @@ struct tcp_log {
 	u32 rqueue;
 	u32 wqueue;
 	u64 socket_idf;
+	unsigned rto_num;
 	char user_agent[MAX_AGENT_LEN];
 };
 
@@ -168,6 +170,7 @@ void jtcp_done(struct sock *sk);
 int jtcp_rcv_established(struct sock *sk, struct sk_buff *skb, struct tcphdr *th, unsigned len);
 void jtcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it,
 				gfp_t gfp_mask);
+void jtcp_retransmit_timer(struct sock *sk);
 
 void purge_timer_run(unsigned long dummy);
 void purge_all_flows(void);
