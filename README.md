@@ -2,8 +2,8 @@
 
 ## TODO
 
-- [ ] Detect Timeout
-- [ ] Get `User Agent` for receive packets
+- [x] Detect Timeout
+- [x] Get `User Agent` for receive packets
 - [ ] Detect Retransmissions
 - [ ] Probe packets on connection setup
 - [ ] Calculate RTT using packet's timestamp
@@ -133,6 +133,7 @@ The data collected by the LKM is exported through `/proc/net/tcpprobe` and is fo
 | retrans | Total number of retransmitted packets |
 | inflight | Number of packets sent but not yet acked |
 | frto_counter | Number of spurious RTO events (After linux 3.10.0, this value is never a counter) |
+| rto_num | Number of retransmit timeout events |
 | rqueue | Number of bytes in the socket read queue |
 | wqueue | Number of bytes in the socket write queue |
 | socket_idf | First sequence number seen for the connection |
