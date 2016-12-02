@@ -143,7 +143,7 @@ void purge_all_flows(void)
    */
 static int
 write_flow(int type, struct tcp_hash_flow *tcp_flow, struct tcp_tuple *tuple, ktime_t tstamp,
-		u64 cumulative_bytes, u16 length, struct sock *sk)
+		u64 cumulative_bytes, u16 length, struct sock *sk, u32 seq_num, u32 ack_num)
 {
 	const struct tcp_sock *tp = tcp_sk(sk);
 	int i=0;
@@ -203,6 +203,8 @@ write_flow(int type, struct tcp_hash_flow *tcp_flow, struct tcp_tuple *tuple, kt
 			p->user_agent[i] = tcp_flow->user_agent[i];
 			i++;
 		}
+		p->seq_num = seq_num;
+		p->ack_num = ack_num;
 		tcp_probe.head = (tcp_probe.head + 1) & (bufsize - 1);
 	} else {
 		TCPPROBE_STAT_INC(ack_drop_ring_full);
@@ -291,7 +293,7 @@ void jtcp_done(struct sock *sk)
 		// Get the other lock and write
 		spin_lock(&tcp_probe.lock);
 		TCPPROBE_STAT_INC(reset_flows);
-		write_flow(4, tcp_flow, &tuple, tstamp, cumulative_bytes, 0, sk);
+		write_flow(4, tcp_flow, &tuple, tstamp, cumulative_bytes, 0, sk, 0, 0);
 		spin_unlock(&tcp_probe.lock);
 		
 		/* Release the flow tuple*/
@@ -369,10 +371,11 @@ int jtcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 	const struct tcp_sock *tp = tcp_sk(sk);
 	const struct inet_sock *inet = inet_sk(sk);
 	int should_write_flow = 0;
-	u16 length = skb->len;
+	u16 length = (skb->len >= tp->tcp_header_len) ? (skb->len - tp->tcp_header_len) : 0;
 	struct tcp_tuple tuple;
 	struct tcp_hash_flow *tcp_flow;
 	unsigned int hash;
+	struct tcp_skb_cb *tcb;
 	u64 cumulative_bytes = 0;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
@@ -453,9 +456,10 @@ int jtcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 			}
 			tcp_flow->last_seq_num = tp->snd_nxt;
 			cumulative_bytes = tcp_flow->cumulative_bytes;
+			tcb = TCP_SKB_CB(skb);
 
 			spin_lock(&tcp_probe.lock);
-			write_flow(0, tcp_flow, &tuple, tstamp, cumulative_bytes, length, sk);
+			write_flow(0, tcp_flow, &tuple, tstamp, cumulative_bytes, length, sk, tcb->seq, tcb->ack_seq);
 			spin_unlock(&tcp_probe.lock);
 			wake_up(&tcp_probe.wait);
 		}
@@ -481,6 +485,7 @@ void jtcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it,
 	struct tcp_hash_flow *tcp_flow;
 	unsigned int hash;
 	u64 cumulative_bytes = 0;
+	struct tcp_skb_cb *tcb;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
 	struct timespec ts; 
@@ -554,9 +559,10 @@ void jtcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it,
 			}
 			tcp_flow->last_seq_num = tp->snd_nxt;
 			cumulative_bytes = tcp_flow->cumulative_bytes;
+			tcb = TCP_SKB_CB(skb);
 
 			spin_lock(&tcp_probe.lock);
-			write_flow(1, tcp_flow, &tuple, tstamp, cumulative_bytes, length, sk);
+			write_flow(1, tcp_flow, &tuple, tstamp, cumulative_bytes, length, sk, tcb->seq, tp->rcv_nxt);
 			spin_unlock(&tcp_probe.lock);
 			wake_up(&tcp_probe.wait);
 		}
@@ -629,7 +635,7 @@ void jtcp_retransmit_timer(struct sock *sk)
 		
 		// Get the other lock and write
 		spin_lock(&tcp_probe.lock);
-		write_flow(5, tcp_flow, &tuple, tstamp, 0, 0, sk);
+		write_flow(5, tcp_flow, &tuple, tstamp, 0, 0, sk, 0, 0);
 		spin_unlock(&tcp_probe.lock);
 		
 		spin_unlock(&tcp_hash_lock);

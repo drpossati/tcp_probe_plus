@@ -53,11 +53,11 @@ static int tcpprobe_sprint(char *tbuf, int n)
 		p->rttvar, p->rto, p->lost, p->retrans, p->inflight, p->length
 	);*/
 	return scnprintf(tbuf, n,
-	"%d %lu.%09lu %pI4:%u %pI4:%u %d %#llx %#x %u %u %u %u %u %u %u %u %u %u %u %u %u %u %#llx %s\n",
+	"%d %lu.%09lu %pI4:%u %pI4:%u %u %#x %#x %#llx %#x %u %u %u %u %u %u %u %u %u %u %u %u %u %u %#llx %s\n",
 	p->type,
 	(unsigned long) tv.tv_sec, (unsigned long) tv.tv_nsec,
 	&p->saddr, ntohs(p->sport), &p->daddr, ntohs(p->dport),
-	p->length, p->snd_nxt, p->snd_una,
+	p->length, p->seq_num, p->ack_num, p->snd_nxt, p->snd_una,
 	p->snd_cwnd, p->ssthresh, p->snd_wnd, p->srtt, p->rttvar, p->mdev, p->rto,
 	p->lost, p->retrans, p->inflight, p->frto_counter, p->rto_num,
 	p->rqueue, p->wqueue, p->socket_idf, p->user_agent);

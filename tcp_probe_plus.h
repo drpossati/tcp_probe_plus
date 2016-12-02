@@ -79,6 +79,8 @@ struct tcp_log {
 	__be32	saddr, daddr;
 	__be16	sport, dport;
 	u16 length;
+	u32 seq_num;
+	u32 ack_num;
 	u64 snd_nxt;
 	u32 snd_una;
 	u32 snd_wnd;
