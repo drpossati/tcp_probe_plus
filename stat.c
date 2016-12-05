@@ -20,16 +20,16 @@
 
 static int tcpprobe_open(struct inode * inode, struct file * file)
 {
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,23)
 	struct timespec ts; 
-#endif
 
 	/* Reset (empty) log */
 	spin_lock_bh(&tcp_probe.lock);
 	tcp_probe.head = tcp_probe.tail = 0;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
+
 	getnstimeofday(&ts);
-	tcp_probe.start = timespec_to_ktime(ts);
+	tcp_probe.start_datetime = timespec_to_ktime(ts);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
+	tcp_probe.start = tcp_probe.start_datetime;
 #else
 	tcp_probe.start = ktime_get();
 #endif
@@ -53,6 +53,15 @@ static int tcpprobe_sprint(char *tbuf, int n)
 		p->rttvar, p->rto, p->lost, p->retrans, p->inflight, p->length
 	);*/
 	return scnprintf(tbuf, n,
+	"%d %lu.%09lu %pI4:%u %pI4:%u %u %#x(%u) %#x(%u) %#llx %#x %u %u %u %u %u %u %u %u %u %u %u %u %u %u %#llx %s\n",
+	p->type,
+	(unsigned long) tv.tv_sec, (unsigned long) tv.tv_nsec,
+	&p->saddr, ntohs(p->sport), &p->daddr, ntohs(p->dport),
+	p->length, p->seq_num, p->seq_num, p->ack_num, p->ack_num, p->snd_nxt, p->snd_una,
+	p->snd_cwnd, p->ssthresh, p->snd_wnd, p->srtt, p->rttvar, p->mdev, p->rto,
+	p->lost, p->retrans, p->inflight, p->frto_counter, p->rto_num,
+	p->rqueue, p->wqueue, p->socket_idf, p->user_agent);
+	/*return scnprintf(tbuf, n,
 	"%d %lu.%09lu %pI4:%u %pI4:%u %u %#x %#x %#llx %#x %u %u %u %u %u %u %u %u %u %u %u %u %u %u %#llx %s\n",
 	p->type,
 	(unsigned long) tv.tv_sec, (unsigned long) tv.tv_nsec,
@@ -60,7 +69,7 @@ static int tcpprobe_sprint(char *tbuf, int n)
 	p->length, p->seq_num, p->ack_num, p->snd_nxt, p->snd_una,
 	p->snd_cwnd, p->ssthresh, p->snd_wnd, p->srtt, p->rttvar, p->mdev, p->rto,
 	p->lost, p->retrans, p->inflight, p->frto_counter, p->rto_num,
-	p->rqueue, p->wqueue, p->socket_idf, p->user_agent);
+	p->rqueue, p->wqueue, p->socket_idf, p->user_agent);*/
 }
 
 static ssize_t tcpprobe_read(struct file *file, char __user *buf,

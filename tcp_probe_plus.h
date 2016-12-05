@@ -97,6 +97,12 @@ struct tcp_log {
 	u32 rqueue;
 	u32 wqueue;
 	u64 socket_idf;
+	/* seq_rtt_us < 0 means parse timestamp option failed, because
+	 *	1. no timestamp option 
+	 *	2. there are other options than timestamp
+	 */
+	/*long seq_rtt_us_tsecr;
+	long seq_rtt_us_skb_mstamp;*/
 	unsigned rto_num;
 	char user_agent[MAX_AGENT_LEN];
 };
@@ -105,6 +111,7 @@ struct tcp_probe_list {
 	spinlock_t lock;
 	wait_queue_head_t wait;
 	ktime_t start;
+	ktime_t start_datetime;
 	u32 lastcwnd;
 	
 	unsigned long head, tail;
@@ -116,6 +123,8 @@ struct tcp_probe_list {
 #else
 #define INIT_NET(x) init_net.x
 #endif
+
+extern ktime_t start_time;
 
 extern struct tcpprobe_stat tcpprobe_stat;
 
@@ -169,10 +178,11 @@ static inline int tcp_tuple_equal(
 u_int32_t hash_tcp_flow(const struct tcp_tuple *tuple);
 
 void jtcp_done(struct sock *sk);
-int jtcp_rcv_established(struct sock *sk, struct sk_buff *skb, struct tcphdr *th, unsigned len);
+int jtcp_rcv_established(struct sock *sk, struct sk_buff *skb, const struct tcphdr *th, unsigned len);
 void jtcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it,
 				gfp_t gfp_mask);
 void jtcp_retransmit_timer(struct sock *sk);
+void jtcp_ack_update_rtt(struct sock *sk, const int flag, long seq_rtt_us, long sack_rtt_us);
 
 void purge_timer_run(unsigned long dummy);
 void purge_all_flows(void);

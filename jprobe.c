@@ -143,7 +143,8 @@ void purge_all_flows(void)
    */
 static int
 write_flow(int type, struct tcp_hash_flow *tcp_flow, struct tcp_tuple *tuple, ktime_t tstamp,
-		u64 cumulative_bytes, u16 length, struct sock *sk, u32 seq_num, u32 ack_num)
+		u64 cumulative_bytes, u16 length, struct sock *sk, struct sk_buff *skb,
+		u32 seq_num, u32 ack_num)
 {
 	const struct tcp_sock *tp = tcp_sk(sk);
 	int i=0;
@@ -166,14 +167,14 @@ write_flow(int type, struct tcp_hash_flow *tcp_flow, struct tcp_tuple *tuple, kt
 		p->ssthresh = tcp_current_ssthresh(sk);
 	
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
-		p->srtt = jiffies_to_usecs(tp->srtt) >> 3;
-		p->rttvar = jiffies_to_usecs(tp->rttvar) >> 2;
-		p->mdev = jiffies_to_usecs(tp->mdev) >> 2;
+		p->srtt = jiffies_to_usecs(tp->srtt);
+		p->rttvar = jiffies_to_usecs(tp->rttvar);
+		p->mdev = jiffies_to_usecs(tp->mdev);
 #else
 		/* element was renamed */ 
-		p->srtt = tp->srtt_us >> 3;
-		p->rttvar = tp->rttvar_us >> 2;
-		p->mdev = tp->mdev_us >> 2;
+		p->srtt = tp->srtt_us;
+		p->rttvar = tp->rttvar_us;
+		p->mdev = tp->mdev_us;
 #endif
 	
 		p->lost = tp->lost_out;
@@ -197,7 +198,6 @@ write_flow(int type, struct tcp_hash_flow *tcp_flow, struct tcp_tuple *tuple, kt
 			p->wqueue = tp->write_seq - tp->snd_una;
 		}
 		p->socket_idf = tcp_flow->first_seq_num;
-
 		p->rto_num = tcp_flow->rto_num;
 		while (tcp_flow->user_agent[i]) {
 			p->user_agent[i] = tcp_flow->user_agent[i];
@@ -293,7 +293,7 @@ void jtcp_done(struct sock *sk)
 		// Get the other lock and write
 		spin_lock(&tcp_probe.lock);
 		TCPPROBE_STAT_INC(reset_flows);
-		write_flow(4, tcp_flow, &tuple, tstamp, cumulative_bytes, 0, sk, 0, 0);
+		write_flow(4, tcp_flow, &tuple, tstamp, cumulative_bytes, 0, sk, NULL, 0, 0);
 		spin_unlock(&tcp_probe.lock);
 		
 		/* Release the flow tuple*/
@@ -361,17 +361,32 @@ get_user_agent(struct sk_buff *skb, char *buff, unsigned buflen) {
 	return 0;
 }
 
+static inline u32
+get_tsecr(const struct tcp_sock *tp, const struct tcphdr *th)
+{
+	const __be32 *ptr = (const __be32 *)(th + 1);
+
+	if (*ptr == htonl((TCPOPT_NOP << 24) | (TCPOPT_NOP << 16)
+			  | (TCPOPT_TIMESTAMP << 8) | TCPOLEN_TIMESTAMP)) {
+		ptr += 2;
+		if (*ptr)
+			return ntohl(*ptr) - tp->tsoffset;
+	}
+	return 0;
+}
+
 /*
 * Hook inserted to be called before each receive packet.
 * Note: arguments must match tcp_rcv_established()!
 */
 int jtcp_rcv_established(struct sock *sk, struct sk_buff *skb,
-				struct tcphdr *th, unsigned len)
+				const struct tcphdr *th, unsigned len)
 {
 	const struct tcp_sock *tp = tcp_sk(sk);
 	const struct inet_sock *inet = inet_sk(sk);
 	int should_write_flow = 0;
-	u16 length = (skb->len >= tp->tcp_header_len) ? (skb->len - tp->tcp_header_len) : 0;
+	int tcp_header_len = tp->tcp_header_len;
+	u16 length = (skb->len >= tcp_header_len) ? (skb->len - tcp_header_len) : 0;
 	struct tcp_tuple tuple;
 	struct tcp_hash_flow *tcp_flow;
 	unsigned int hash;
@@ -459,13 +474,12 @@ int jtcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 			tcb = TCP_SKB_CB(skb);
 
 			spin_lock(&tcp_probe.lock);
-			write_flow(0, tcp_flow, &tuple, tstamp, cumulative_bytes, length, sk, tcb->seq, tcb->ack_seq);
+			write_flow(0, tcp_flow, &tuple, tstamp, cumulative_bytes, length, sk, skb, tcb->seq, tcb->ack_seq);
 			spin_unlock(&tcp_probe.lock);
 			wake_up(&tcp_probe.wait);
 		}
 		spin_unlock(&tcp_hash_lock);
 	}
-skip:
 	jprobe_return();
 	return 0;
 }
@@ -562,7 +576,7 @@ void jtcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it,
 			tcb = TCP_SKB_CB(skb);
 
 			spin_lock(&tcp_probe.lock);
-			write_flow(1, tcp_flow, &tuple, tstamp, cumulative_bytes, length, sk, tcb->seq, tp->rcv_nxt);
+			write_flow(1, tcp_flow, &tuple, tstamp, cumulative_bytes, length, sk, skb, tcb->seq, tp->rcv_nxt);
 			spin_unlock(&tcp_probe.lock);
 			wake_up(&tcp_probe.wait);
 		}
@@ -573,8 +587,7 @@ void jtcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it,
 }
 
 /*
-* Hook inserted to be called before each sent packet.
-* Note: arguments must match tcp_transmit_skb()!
+* Hook inserted to be called before RTO timeout.
 */
 void jtcp_retransmit_timer(struct sock *sk)
 {
@@ -635,7 +648,7 @@ void jtcp_retransmit_timer(struct sock *sk)
 		
 		// Get the other lock and write
 		spin_lock(&tcp_probe.lock);
-		write_flow(5, tcp_flow, &tuple, tstamp, 0, 0, sk, 0, 0);
+		write_flow(5, tcp_flow, &tuple, tstamp, 0, 0, sk, NULL, 0, 0);
 		spin_unlock(&tcp_probe.lock);
 		
 		spin_unlock(&tcp_hash_lock);

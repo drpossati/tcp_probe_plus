@@ -7,6 +7,7 @@
 #include <linux/module.h>
 #include <linux/ktime.h>
 #include <linux/time.h>
+#include <linux/rtc.h>
 #include <linux/jhash.h>
 #include <linux/jiffies.h>
 #include <linux/list.h>
@@ -18,6 +19,8 @@
 #include <net/tcp.h>
 
 #include "tcp_probe_plus.h"
+
+ktime_t start_time;
 
 static struct ctl_table_header *tcpprobe_sysctl_header;
 
@@ -68,6 +71,8 @@ static __init int tcpprobe_init(void)
 {
 	int ret = -ENOMEM;
 	struct proc_dir_entry *proc_stat;
+	struct timespec ct_ts;
+	struct rtc_time ct_tm;
 
 	init_waitqueue_head(&tcp_probe.wait);
 	spin_lock_init(&tcp_probe.lock);
@@ -174,7 +179,6 @@ static __init int tcpprobe_init(void)
 		goto err_tcpdone;
 	}
 
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
 	pr_info("Not registering jprobe on tcp_done as it is an inline method in this kernel version.\n");
 #else
@@ -185,13 +189,24 @@ static __init int tcpprobe_init(void)
 	}
 #endif 
 
-	pr_info("TCP probe plus registered (port=%d) bufsize=%u probetime=%d maxflows=%u\n", 
-	port, bufsize, probetime, maxflows);
+	getnstimeofday(&ct_ts);
+	start_time = timespec_to_ktime(ct_ts);
+
+	/*UTC +8 time*/
+	ct_ts.tv_sec += 28800;
+	rtc_time_to_tm((unsigned long) ct_ts.tv_sec, &ct_tm);
+
+
+	pr_info("(%04d-%02d-%02d %02d:%02d:%02d) TCP probe plus registered (port=%d) bufsize=%u probetime=%d maxflows=%u\n", 
+		ct_tm.tm_year + 1900, ct_tm.tm_mon + 1, ct_tm.tm_mday,
+		ct_tm.tm_hour, ct_tm.tm_min, ct_tm.tm_sec,
+		port, bufsize, probetime, maxflows);
 	PRINT_DEBUG("Sizes tcp_hash_flow: %zu, hlist_head = %zu tcp_hash = %zu\n", 
 	sizeof(struct tcp_hash_flow), sizeof(struct hlist_head), sizeof(tcp_hash));
 	PRINT_DEBUG("Sizes hlist_node = %zu list_head = %zu, ktime_t = %zu tcp_tuple = %zu\n", 
 	sizeof(struct hlist_node), sizeof(struct list_head), sizeof(ktime_t), sizeof(struct tcp_tuple));
 	PRINT_DEBUG("Sizes tcp_log = %zu\n", sizeof (struct tcp_log));
+
 	return 0;
 
 err_tcpdone:
@@ -216,6 +231,14 @@ err:
 
 static __exit void tcpprobe_exit(void)
 {
+	struct timespec ct_ts;
+	struct rtc_time ct_tm;
+
+	getnstimeofday(&ct_ts);
+	/*UTC +8 time*/
+	ct_ts.tv_sec += 28800;
+	rtc_time_to_tm((unsigned long) ct_ts.tv_sec, &ct_tm);
+
 	remove_proc_entry(PROC_TCPPROBE, INIT_NET(proc_net));
 	remove_proc_entry(PROC_STAT_TCPPROBE, INIT_NET(proc_net_stat));
 	unregister_sysctl_table(tcpprobe_sysctl_header);
@@ -233,7 +256,9 @@ static __exit void tcpprobe_exit(void)
 	purge_all_flows();
 	kmem_cache_destroy(tcp_flow_cachep);
 	vfree(tcp_hash);
-	pr_info("TCP probe plus unregistered.\n");
+	pr_info("(%04d-%02d-%02d %02d:%02d:%02d) TCP probe plus unregistered.\n",
+		ct_tm.tm_year + 1900, ct_tm.tm_mon + 1, ct_tm.tm_mday,
+		ct_tm.tm_hour, ct_tm.tm_min, ct_tm.tm_sec);
 }
 
 module_init(tcpprobe_init);

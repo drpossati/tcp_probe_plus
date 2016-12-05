@@ -6,7 +6,9 @@
 - [x] Get `User Agent` for receive packets
 - [ ] Detect Retransmissions
 - [ ] Probe packets on connection setup
-- [ ] Calculate RTT using packet's timestamp
+- [x] Calculate RTT using packet's timestamp
+- [ ] Flags in the tcp header
+- [ ] Verify of send buffer and receive buffer
 
 ## License
 Please review the:
@@ -125,11 +127,11 @@ The data collected by the LKM is exported through `/proc/net/tcpprobe` and is fo
 | snd_cwnd | Current congestion window size (in number of packets) |
 | ssthresh | Slow-start threshold (in number of packets) |
 | snd_wnd | Receive window size (in number of packets) |
-| srtt | Smoothed rtt (in us) |
-| mdev | Medium deviation of rtt (in us) |
-| rttvar | Standard deviation of the rtt (in us) |
+| srtt | Smoothed rtt (in 8us) |
+| mdev | Medium deviation of rtt (in 4us) |
+| rttvar | Standard deviation of the rtt (in 4us) |
 | rto | duration of retransmit timeout (in ms) |
-| lost | (estimated) Number of lost packets currently. |
+| lost | (estimated) Number of lost packets currently (not total). |
 | retrans | Total number of retransmitted packets |
 | inflight | Number of packets sent but not yet acked |
 | frto_counter | Number of spurious RTO events (After linux 3.10.0, this value is never a counter) |
@@ -137,6 +139,8 @@ The data collected by the LKM is exported through `/proc/net/tcpprobe` and is fo
 | rqueue | Number of bytes in the socket read queue |
 | wqueue | Number of bytes in the socket write queue |
 | socket_idf | First sequence number seen for the connection |
+| seq_num | sequence number in the tcp header |
+| ack_num | ack number in the tcp header |
  
 ## Sysctl interface
 
