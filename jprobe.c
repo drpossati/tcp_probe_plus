@@ -143,8 +143,8 @@ void purge_all_flows(void)
    */
 static int
 write_flow(int type, struct tcp_hash_flow *tcp_flow, struct tcp_tuple *tuple, ktime_t tstamp,
-		u64 cumulative_bytes, u16 length, struct sock *sk, struct sk_buff *skb,
-		u32 seq_num, u32 ack_num, long temp)
+		struct sock *sk, struct sk_buff *skb, u8 tcp_flags, u16 length,
+		u32 seq_num, u32 ack_num, long reserved)
 {
 	const struct tcp_sock *tp = tcp_sk(sk);
 	int i=0;
@@ -158,9 +158,10 @@ write_flow(int type, struct tcp_hash_flow *tcp_flow, struct tcp_tuple *tuple, kt
 		p->sport = tuple->sport;
 		p->daddr = tuple->daddr;
 		p->dport = tuple->dport;
+		p->tcp_flags = tcp_flags;
 		p->length = length;
 		/* update the cumulative bytes */
-		p->snd_nxt = cumulative_bytes;
+		p->snd_nxt = tp->snd_nxt;
 		p->snd_una = tp->snd_una;
 		p->snd_cwnd = tp->snd_cwnd;
 		p->snd_wnd = tp->snd_wnd;
@@ -205,7 +206,6 @@ write_flow(int type, struct tcp_hash_flow *tcp_flow, struct tcp_tuple *tuple, kt
 		}
 		p->seq_num = seq_num;
 		p->ack_num = ack_num;
-		p->seq_rtt = temp;
 		tcp_probe.head = (tcp_probe.head + 1) & (bufsize - 1);
 	} else {
 		TCPPROBE_STAT_INC(ack_drop_ring_full);
@@ -229,7 +229,6 @@ void jtcp_done(struct sock *sk)
 	struct tcp_tuple tuple;
 	struct tcp_hash_flow *tcp_flow;
 	unsigned int hash;
-	u64 cumulative_bytes = 0;
 	ktime_t tstamp;
 
 
@@ -278,22 +277,13 @@ void jtcp_done(struct sock *sk)
 			spin_unlock(&tcp_hash_lock);
 			goto skip;
 		} else {
-			/*Retrieve the last value of the cumulative_bytes */
-			if (tp->snd_nxt > tcp_flow->last_seq_num) {
-				tcp_flow->cumulative_bytes += (tp->snd_nxt - tcp_flow->last_seq_num);
-			} else if (tp->snd_nxt != tcp_flow->last_seq_num) { /* Retransmits */
-				/* sequence number rollover. For 10 Gbits/sec flow this will
-				happen every 4 seconds */
-				tcp_flow->cumulative_bytes += ((UINT32_MAX - tcp_flow->last_seq_num) + tp->snd_nxt);
-			}
 			tcp_flow->last_seq_num = tp->snd_nxt;
-			cumulative_bytes = tcp_flow->cumulative_bytes; 
 		}
 		
 		// Get the other lock and write
 		spin_lock(&tcp_probe.lock);
 		TCPPROBE_STAT_INC(reset_flows);
-		write_flow(4, tcp_flow, &tuple, tstamp, cumulative_bytes, 0, sk, NULL, 0, 0, 0);
+		write_flow(4, tcp_flow, &tuple, tstamp, sk, NULL, 0, 0, 0, 0, 0);
 		spin_unlock(&tcp_probe.lock);
 		
 		/* Release the flow tuple*/
@@ -391,7 +381,7 @@ int jtcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 	struct tcp_hash_flow *tcp_flow;
 	unsigned int hash;
 	struct tcp_skb_cb *tcb;
-	u64 cumulative_bytes = 0;
+	u8 tcp_flags;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
 	struct timespec ts; 
@@ -457,19 +447,13 @@ int jtcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 		}
 		if (should_write_flow) {
 			get_user_agent(skb, tcp_flow->user_agent, MAX_AGENT_LEN-1);
-			if (tp->snd_nxt > tcp_flow->last_seq_num) {
-				tcp_flow->cumulative_bytes += (tp->snd_nxt - tcp_flow->last_seq_num);
-			} else if (tp->snd_nxt != tcp_flow->last_seq_num) { /* Retransmits */
-				/* sequence number rollover. For 10 Gbits/sec flow this will
-				happen every 4 seconds */
-				tcp_flow->cumulative_bytes += ((UINT32_MAX - tcp_flow->last_seq_num) + tp->snd_nxt);
-			}
 			tcp_flow->last_seq_num = tp->snd_nxt;
-			cumulative_bytes = tcp_flow->cumulative_bytes;
 			tcb = TCP_SKB_CB(skb);
-
+			tcp_flags = (th->cwr << 7) | (th->ece << 6) | (th->urg << 5) | (th->ack << 4) |
+							(th->psh << 3) | (th->rst << 2) | (th->syn << 1) | (th->fin);
 			spin_lock(&tcp_probe.lock);
-			write_flow(0, tcp_flow, &tuple, tstamp, cumulative_bytes, length, sk, skb, tcb->seq, tcb->ack_seq, 0);
+			write_flow(0, tcp_flow, &tuple, tstamp, sk, skb,
+						tcp_flags, length, tcb->seq, tcb->ack_seq, 0);
 			spin_unlock(&tcp_probe.lock);
 			wake_up(&tcp_probe.wait);
 		}
@@ -493,7 +477,6 @@ void jtcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it,
 	struct tcp_tuple tuple;
 	struct tcp_hash_flow *tcp_flow;
 	unsigned int hash;
-	u64 cumulative_bytes = 0;
 	struct tcp_skb_cb *tcb;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
@@ -565,19 +548,11 @@ void jtcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it,
 			}
 		}
 		if (should_write_flow) {
-			if (tp->snd_nxt > tcp_flow->last_seq_num) {
-				tcp_flow->cumulative_bytes += (tp->snd_nxt - tcp_flow->last_seq_num);
-			} else if (tp->snd_nxt != tcp_flow->last_seq_num) { /* Retransmits */
-				/* sequence number rollover. For 10 Gbits/sec flow this will
-				happen every 4 seconds */
-				tcp_flow->cumulative_bytes += ((UINT32_MAX - tcp_flow->last_seq_num) + tp->snd_nxt);
-			}
 			tcp_flow->last_seq_num = tp->snd_nxt;
-			cumulative_bytes = tcp_flow->cumulative_bytes;
 			tcb = TCP_SKB_CB(skb);
-
 			spin_lock(&tcp_probe.lock);
-			write_flow(1, tcp_flow, &tuple, tstamp, cumulative_bytes, length, sk, skb, tcb->seq, tp->rcv_nxt, 0);
+			write_flow(1, tcp_flow, &tuple, tstamp, sk, skb,
+						tcb->tcp_flags, length, tcb->seq, tp->rcv_nxt, 0);
 			spin_unlock(&tcp_probe.lock);
 			wake_up(&tcp_probe.wait);
 		}
@@ -645,13 +620,12 @@ void jtcp_retransmit_timer(struct sock *sk)
 			spin_unlock(&tcp_hash_lock);
 			goto skip;
 		} else {
-			/*Retrieve the last value of the cumulative_bytes */
 			tcp_flow->rto_num ++;
 		}
 		
 		// Get the other lock and write
 		spin_lock(&tcp_probe.lock);
-		write_flow(5, tcp_flow, &tuple, tstamp, 0, 0, sk, NULL, 0, 0, 0);
+		write_flow(5, tcp_flow, &tuple, tstamp, sk, NULL, 0, 0, 0, 0, 0);
 		spin_unlock(&tcp_probe.lock);
 		
 		spin_unlock(&tcp_hash_lock);
@@ -677,7 +651,6 @@ void jtcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	struct tcp_tuple tuple;
 	struct tcp_hash_flow *tcp_flow;
 	unsigned int hash;
-	u64 cumulative_bytes = 0;
 	struct tcp_skb_cb *tcb;
 	u32 synack_stamp;
 
@@ -734,25 +707,18 @@ void jtcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 			);
 			tcp_flow = init_tcp_hash_flow(&tuple, tstamp, hash);
 			tcp_flow->first_seq_num = tp->snd_nxt; 
+			tcp_flow->last_seq_num = 0;
 			tcp_flow->tstamp = tstamp;
 			tcp_flow->rto_num = 0;
 			tcp_flow->user_agent[0] = '\0';
 			should_write_flow = 1;
 		}
-		if (tp->snd_nxt > tcp_flow->last_seq_num) {
-			tcp_flow->cumulative_bytes += (tp->snd_nxt - tcp_flow->last_seq_num);
-		} else if (tp->snd_nxt != tcp_flow->last_seq_num) { /* Retransmits */
-			/* sequence number rollover. For 10 Gbits/sec flow this will
-			happen every 4 seconds */
-			tcp_flow->cumulative_bytes += ((UINT32_MAX - tcp_flow->last_seq_num) + tp->snd_nxt);
-		}
 		tcp_flow->last_seq_num = tp->snd_nxt;
-		cumulative_bytes = tcp_flow->cumulative_bytes;
 		tcb = TCP_SKB_CB(skb);
 
 		synack_stamp = tcp_rsk(req)->snt_synack;
 		spin_lock(&tcp_probe.lock);
-		write_flow(3, tcp_flow, &tuple, tstamp, cumulative_bytes, length, sk, skb, tcb->seq, tp->rcv_nxt, jiffies_to_usecs(tcp_time_stamp - synack_stamp));
+		write_flow(3, tcp_flow, &tuple, tstamp, sk, skb, 0, length, tcb->seq, tp->rcv_nxt, 0);
 		spin_unlock(&tcp_probe.lock);
 		wake_up(&tcp_probe.wait);
 		

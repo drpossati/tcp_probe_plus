@@ -47,8 +47,6 @@ struct tcp_hash_flow {
 	
 	/* Last ACK Timestamp */
 	ktime_t tstamp;
-	/* Cumulative bytes sent */
-	u64 cumulative_bytes;
 	/* remember last sequence number */
 	u32 last_seq_num;
 	u64 first_seq_num;
@@ -94,6 +92,7 @@ struct tcp_log {
 	u32 inflight;
 	u32 rto;
 	u8 frto_counter;
+	u8 tcp_flags;
 	u32 rqueue;
 	u32 wqueue;
 	u64 socket_idf;
