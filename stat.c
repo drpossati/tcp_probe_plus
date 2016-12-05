@@ -88,8 +88,7 @@ static ssize_t tcpprobe_read(struct file *file, char __user *buf,
 		int width;
 		
 		/* Wait for data in buffer */
-		error = wait_event_interruptible(tcp_probe.wait,
-		tcp_probe_used() > 0);
+		error = wait_event_interruptible(tcp_probe.wait, tcp_probe_used() > 0);
 		if (error)
 			break;
 		

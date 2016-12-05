@@ -5,7 +5,7 @@
 - [x] Detect Timeout
 - [x] Get `User Agent` for receive packets
 - [ ] Detect Retransmissions
-- [ ] Probe packets on connection setup
+- [x] Probe packets on connection setup
 - [x] Calculate RTT using packet's timestamp
 - [ ] Flags in the tcp header
 - [ ] Verify of send buffer and receive buffer

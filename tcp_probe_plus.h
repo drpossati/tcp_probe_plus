@@ -104,6 +104,7 @@ struct tcp_log {
 	/*long seq_rtt_us_tsecr;
 	long seq_rtt_us_skb_mstamp;*/
 	unsigned rto_num;
+	long seq_rtt;
 	char user_agent[MAX_AGENT_LEN];
 };
 
@@ -182,7 +183,7 @@ int jtcp_rcv_established(struct sock *sk, struct sk_buff *skb, const struct tcph
 void jtcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it,
 				gfp_t gfp_mask);
 void jtcp_retransmit_timer(struct sock *sk);
-void jtcp_ack_update_rtt(struct sock *sk, const int flag, long seq_rtt_us, long sack_rtt_us);
+void jtcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb, struct request_sock *req, struct dst_entry *dst);
 
 void purge_timer_run(unsigned long dummy);
 void purge_all_flows(void);
