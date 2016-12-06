@@ -37,7 +37,7 @@ unsigned int readnum __read_mostly = 10;
 MODULE_PARM_DESC(readnum, "The number of probes to be read each time (10)");
 module_param(readnum, uint, 0);
 
-int full __read_mostly = 0;
+int full __read_mostly = 1;
 MODULE_PARM_DESC(full, "Full log (1=every ack packet received,  0=only cwnd changes)");
 module_param(full, int, 0);
 
@@ -49,7 +49,7 @@ int hashsize __read_mostly = 0;
 MODULE_PARM_DESC(hashsize, "hash table size");
 module_param(hashsize, int, 0);
 
-int maxflows __read_mostly = 2000000;
+int maxflows __read_mostly = 1000;
 MODULE_PARM_DESC(maxflows, "Maximum number of flows");
 module_param(maxflows, int, 0);
 
@@ -57,8 +57,8 @@ int debug __read_mostly = 0;
 MODULE_PARM_DESC(debug, "Enable debug messages (Default 0) debug=1, trace=2");
 module_param(debug, int , 0);
 
-int purgetime __read_mostly = 300;
-MODULE_PARM_DESC(purgetime, "Max inactivity in seconds before purging a flow (Default 300 seconds)");
+int purgetime __read_mostly = 30;
+MODULE_PARM_DESC(purgetime, "Max inactivity in seconds before purging a flow (Default 30 seconds)");
 
 struct ctl_table tcpprobe_sysctl_table[] = {
 	{

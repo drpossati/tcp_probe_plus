@@ -7,8 +7,8 @@
 - [x] Detect Retransmissions
 - [x] Probe packets on connection setup
 - [x] Calculate RTT using packet's timestamp
-- [ ] Flags in the tcp header
-- [ ] Verify of send buffer and receive buffer
+- [x] Flags in the tcp header
+- [x] Verify of send buffer and receive buffer
 
 ## License
 Please review the:
