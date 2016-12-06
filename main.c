@@ -26,9 +26,9 @@ static struct ctl_table_header *tcpprobe_sysctl_header;
 
 static struct jprobe tcp_jprobe_recv = {
 	.kp = {
-		.symbol_name	= "tcp_rcv_established",
+		.symbol_name = "tcp_v4_do_rcv",
 	},
-	.entry	= (kprobe_opcode_t *) jtcp_rcv_established,
+	.entry = (kprobe_opcode_t *) jtcp_v4_do_rcv,
 };
 
 
@@ -56,6 +56,12 @@ static struct jprobe tcp_jprobe_syn_recv = {
 		.symbol_name = "tcp_v4_syn_recv_sock",
 	},
 	.entry = (kprobe_opcode_t *) jtcp_v4_syn_recv_sock,
+};
+static struct jprobe tcp_jprobe_test= {
+	.kp = {
+		.symbol_name	= "tcp_rcv_established",
+	},
+	.entry	= (kprobe_opcode_t *) jtcp_rcv_established,
 };
 
 
@@ -170,7 +176,7 @@ static __init int tcpprobe_init(void)
 
 	ret = register_jprobe(&tcp_jprobe_recv);
 	if (ret) {
-		pr_err("Unable to register jprobe on tcp_rcv_established.\n");
+		pr_err("Unable to register jprobe on tcp_v4_do_rcv.\n");
 		goto err1;
 	}
 
@@ -191,6 +197,12 @@ static __init int tcpprobe_init(void)
 		pr_err("Unable to register jprobe on tcp_v4_syn_recv_sock.\n");
 		goto err_tcpdone;
 	}
+
+	/*ret = register_jprobe(&tcp_jprobe_test);
+	if (ret) {
+		pr_err("Unable to register jprobe on tcp_v4_syn_recv_sock.\n");
+		goto err_tcpdone;
+	}*/
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
 	pr_info("Not registering jprobe on tcp_done as it is an inline method in this kernel version.\n");
@@ -227,6 +239,7 @@ err_tcpdone:
 	unregister_jprobe(&tcp_jprobe_send);
 	unregister_jprobe(&tcp_jprobe_rto_timeout);
 	unregister_jprobe(&tcp_jprobe_syn_recv);
+	/*unregister_jprobe(&tcp_jprobe_test);*/
 err1:
 	remove_proc_entry(PROC_TCPPROBE, INIT_NET(proc_net));
 err_free_proc_stat:
@@ -260,6 +273,7 @@ static __exit void tcpprobe_exit(void)
 	unregister_jprobe(&tcp_jprobe_send);
 	unregister_jprobe(&tcp_jprobe_rto_timeout);
 	unregister_jprobe(&tcp_jprobe_syn_recv);
+	/*unregister_jprobe(&tcp_jprobe_test);*/
 
 #if LINUX_VERSION_CODE >=  KERNEL_VERSION(2,6,22)	
 	unregister_jprobe(&tcp_jprobe_done);

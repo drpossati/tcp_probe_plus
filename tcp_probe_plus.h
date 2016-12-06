@@ -26,6 +26,10 @@
 #define pr_err(fmt, arg...) pr_info(fmt, ##arg)
 #endif
 
+#define TCP_FLAGS(th) \
+	(th->cwr << 7) | (th->ece << 6) | (th->urg << 5) | (th->ack << 4) | \
+		(th->psh << 3) | (th->rst << 2) | (th->syn << 1) | (th->fin);
+
 #define MAX_AGENT_LEN 128
 
 struct tcp_tuple {
@@ -183,6 +187,7 @@ void jtcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it,
 				gfp_t gfp_mask);
 void jtcp_retransmit_timer(struct sock *sk);
 void jtcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb, struct request_sock *req, struct dst_entry *dst);
+void jtcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb);
 
 void purge_timer_run(unsigned long dummy);
 void purge_all_flows(void);

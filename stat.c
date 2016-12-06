@@ -43,24 +43,26 @@ static int tcpprobe_sprint(char *tbuf, int n)
 	const struct tcp_log *p = tcp_probe.log + tcp_probe.tail;
 	struct timespec tv = ktime_to_timespec(ktime_sub(p->tstamp, tcp_probe.start));
 	
-	/*return scnprintf(
-		tbuf, n,
-		"%lu.%09lu %pI4:%u %pI4:%u %u %u %u %u %u %u %u %u %u %u\n",
-		(unsigned long) tv.tv_sec, (unsigned long) tv.tv_nsec / 1000,
-		&p->saddr, ntohs(p->sport),
-		&p->daddr, ntohs(p->dport),
-		p->snd_cwnd, p->ssthresh, p->snd_wnd, p->srtt,
-		p->rttvar, p->rto, p->lost, p->retrans, p->inflight, p->length
-	);*/
-	return scnprintf(tbuf, n,
-	"%d %lu.%09lu %pI4:%u %pI4:%u %u %#x %#x(%u) %#x(%u) %#llx %#x %#x %u %u %u %u %u %u %u %u %u %u %u %u %u %#llx %s\n",
-	p->type,
-	(unsigned long) tv.tv_sec, (unsigned long) tv.tv_nsec,
-	&p->saddr, ntohs(p->sport), &p->daddr, ntohs(p->dport),
-	p->length, p->tcp_flags, p->seq_num, p->seq_num, p->ack_num, p->ack_num, p->snd_nxt, p->snd_una,
-	p->snd_cwnd, p->ssthresh, p->snd_wnd, p->srtt, p->rttvar, p->mdev, p->rto,
-	p->lost, p->retrans, p->inflight, p->frto_counter, p->rto_num,
-	p->rqueue, p->wqueue, p->socket_idf, p->user_agent);
+	int copied = 0;
+	copied += scnprintf(tbuf+copied, n-copied, "%d %lu.%09lu %pI4:%u %pI4:%u ", 
+		p->type, (unsigned long) tv.tv_sec, (unsigned long) tv.tv_nsec,
+		&p->saddr, ntohs(p->sport), &p->daddr, ntohs(p->dport)
+	);
+	copied += scnprintf(tbuf+copied, n-copied, "%u %#x %#x(%u) %#x(%u) %#llx %#x ", 
+		p->length, p->tcp_flags, p->seq_num, p->seq_num, p->ack_num, p->ack_num,
+		p->snd_nxt, p->snd_una
+	);
+	copied += scnprintf(tbuf+copied, n-copied, "%u %u %u %u %u %u %u ", 
+		p->snd_cwnd, p->ssthresh, p->snd_wnd, p->srtt, p->rttvar, p->mdev, p->rto
+	);
+	copied += scnprintf(tbuf+copied, n-copied, "%u %u %u %u %u ",
+		p->lost, p->retrans, p->inflight, p->frto_counter, p->rto_num
+	);
+	copied += scnprintf(tbuf+copied, n-copied, "%u %u %#llx %s ",
+		p->rqueue, p->wqueue, p->socket_idf, p->user_agent
+	);
+	copied += scnprintf(tbuf+copied, n-copied, "\n");
+	return copied;
 	/*return scnprintf(tbuf, n,
 	"%d %lu.%09lu %pI4:%u %pI4:%u %u %#x %#x %#llx %#x %u %u %u %u %u %u %u %u %u %u %u %u %u %u %#llx %s\n",
 	p->type,
