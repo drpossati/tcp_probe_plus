@@ -52,3 +52,4 @@ dkms.conf
 
 *.swp
 /output/
+/archive/

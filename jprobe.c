@@ -446,7 +446,9 @@ int jtcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 			}
 		}
 		if (should_write_flow) {
-			get_user_agent(skb, tcp_flow->user_agent, MAX_AGENT_LEN-1);
+			if (tcp_flow->user_agent[0] == '\0') {
+				get_user_agent(skb, tcp_flow->user_agent, MAX_AGENT_LEN-1);
+			}
 			tcp_flow->last_seq_num = tp->snd_nxt;
 			tcb = TCP_SKB_CB(skb);
 			tcp_flags = TCP_FLAGS(th);
