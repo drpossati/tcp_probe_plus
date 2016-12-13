@@ -51,6 +51,7 @@ struct tcp_hash_flow {
 	
 	/* Last ACK Timestamp */
 	ktime_t tstamp;
+	u32 first_ack_num;
 	/* remember last sequence number */
 	u32 last_seq_num;
 	u64 first_seq_num;
@@ -73,6 +74,14 @@ struct tcpprobe_stat {
 };
 
 #define TCPPROBE_STAT_INC(count) (__get_cpu_var(tcpprobe_stat).count++)
+
+enum {
+	LOG_RECV = 0,
+	LOG_SEND,
+	LOG_TIMEOUT,
+	LOG_SETUP,
+	LOG_DONE,
+};
 
 struct tcp_log {
 	/* log type: recv(0), send(1), timeout(2), connection setup(3), tcp_done(4), RTO timeout(5)*/

@@ -9,6 +9,9 @@
 - [x] Calculate RTT using packet's timestamp
 - [x] Flags in the tcp header
 - [x] Verify of send buffer and receive buffer
+- [ ] Use relative sequence number and ack number
+- [ ] Use relative timestamp
+- [ ] Test rto
 
 ## License
 Please review the:

@@ -161,8 +161,13 @@ write_flow(int type, struct tcp_hash_flow *tcp_flow, struct tcp_tuple *tuple, kt
 		p->tcp_flags = tcp_flags;
 		p->length = length;
 		/* update the cumulative bytes */
-		p->snd_nxt = tp->snd_nxt;
-		p->snd_una = tp->snd_una;
+		if (type != LOG_SETUP) {
+			p->snd_nxt = tp->snd_nxt - tcp_flow->first_seq_num;
+			p->snd_una = tp->snd_una - tcp_flow->first_seq_num;
+		} else {
+			p->snd_nxt = 0;
+			p->snd_una = 0;
+		}
 		p->snd_cwnd = tp->snd_cwnd;
 		p->snd_wnd = tp->snd_wnd;
 		p->ssthresh = tcp_current_ssthresh(sk);
@@ -283,7 +288,7 @@ void jtcp_done(struct sock *sk)
 		// Get the other lock and write
 		spin_lock(&tcp_probe.lock);
 		TCPPROBE_STAT_INC(reset_flows);
-		write_flow(4, tcp_flow, &tuple, tstamp, sk, NULL, 0, 0, 0, 0, 0);
+		write_flow(LOG_DONE, tcp_flow, &tuple, tstamp, sk, NULL, 0, 0, 0, 0, 0);
 		spin_unlock(&tcp_probe.lock);
 		
 		/* Release the flow tuple*/
@@ -380,7 +385,7 @@ int jtcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 	struct tcp_tuple tuple;
 	struct tcp_hash_flow *tcp_flow;
 	unsigned int hash;
-	struct tcp_skb_cb *tcb;
+	struct tcp_skb_cb *tcb = TCP_SKB_CB(skb);
 	u8 tcp_flags;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
@@ -430,7 +435,8 @@ int jtcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 					ntohs(tuple.sport), ntohs(tuple.dport)
 				);
 				tcp_flow = init_tcp_hash_flow(&tuple, tstamp, hash);
-				tcp_flow->first_seq_num = tp->snd_nxt; 
+				tcp_flow->first_seq_num = tcb->ack_seq; 
+				tcp_flow->first_ack_num = tcb->seq;
 				tcp_flow->tstamp = tstamp;
 				tcp_flow->rto_num = 0;
 				tcp_flow->user_agent[0] = '\0';
@@ -450,11 +456,11 @@ int jtcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 				get_user_agent(skb, tcp_flow->user_agent, MAX_AGENT_LEN-1);
 			}
 			tcp_flow->last_seq_num = tp->snd_nxt;
-			tcb = TCP_SKB_CB(skb);
 			tcp_flags = TCP_FLAGS(th);
 			spin_lock(&tcp_probe.lock);
-			write_flow(0, tcp_flow, &tuple, tstamp, sk, skb,
-						tcp_flags, length, tcb->seq, tcb->ack_seq, 0);
+			write_flow(LOG_RECV, tcp_flow, &tuple, tstamp, sk, skb, tcp_flags, length,
+						tcb->seq - tcp_flow->first_ack_num,
+						tcb->ack_seq - tcp_flow->first_seq_num, 0);
 			spin_unlock(&tcp_probe.lock);
 			wake_up(&tcp_probe.wait);
 		}
@@ -478,7 +484,7 @@ void jtcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it,
 	struct tcp_tuple tuple;
 	struct tcp_hash_flow *tcp_flow;
 	unsigned int hash;
-	struct tcp_skb_cb *tcb;
+	struct tcp_skb_cb *tcb = TCP_SKB_CB(skb);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
 	struct timespec ts; 
@@ -528,7 +534,8 @@ void jtcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it,
 						&tuple.saddr, &tuple.daddr,
 						ntohs(tuple.sport), ntohs(tuple.dport));
 					tcp_flow = init_tcp_hash_flow(&tuple, tstamp, hash);
-					tcp_flow->first_seq_num = tp->snd_nxt; 
+					tcp_flow->first_seq_num = tcb->seq;
+					tcp_flow->first_ack_num = tp->rcv_nxt;
 					tcp_flow->tstamp = tstamp;
 					tcp_flow->rto_num = 0;
 					tcp_flow->user_agent[0] = '\0';
@@ -550,10 +557,10 @@ void jtcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it,
 		}
 		if (should_write_flow) {
 			tcp_flow->last_seq_num = tp->snd_nxt;
-			tcb = TCP_SKB_CB(skb);
 			spin_lock(&tcp_probe.lock);
-			write_flow(1, tcp_flow, &tuple, tstamp, sk, skb,
-						tcb->tcp_flags, length, tcb->seq, tp->rcv_nxt, 0);
+			write_flow(LOG_SEND, tcp_flow, &tuple, tstamp, sk, skb, tcb->tcp_flags, length,
+						tcb->seq - tcp_flow->first_seq_num,
+						tp->rcv_nxt - tcp_flow->first_ack_num, 0);
 			spin_unlock(&tcp_probe.lock);
 			wake_up(&tcp_probe.wait);
 		}
@@ -626,7 +633,7 @@ void jtcp_retransmit_timer(struct sock *sk)
 		
 		// Get the other lock and write
 		spin_lock(&tcp_probe.lock);
-		write_flow(5, tcp_flow, &tuple, tstamp, sk, NULL, 0, 0, 0, 0, 0);
+		write_flow(LOG_TIMEOUT, tcp_flow, &tuple, tstamp, sk, NULL, 0, 0, 0, 0, 0);
 		spin_unlock(&tcp_probe.lock);
 		
 		spin_unlock(&tcp_hash_lock);
@@ -654,7 +661,7 @@ void jtcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	struct tcp_tuple tuple;
 	struct tcp_hash_flow *tcp_flow;
 	unsigned int hash;
-	struct tcp_skb_cb *tcb;
+	struct tcp_skb_cb *tcb = TCP_SKB_CB(skb);
 	const struct iphdr *iph = ip_hdr(skb);
 	u8 tcp_flags;
 
@@ -703,7 +710,8 @@ void jtcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 				ntohs(tuple.sport), ntohs(tuple.dport)
 			);
 			tcp_flow = init_tcp_hash_flow(&tuple, tstamp, hash);
-			tcp_flow->first_seq_num = tp->snd_nxt; 
+			tcp_flow->first_seq_num = tcb->ack_seq;
+			tcp_flow->first_ack_num = tcb->seq;
 			tcp_flow->last_seq_num = tp->snd_nxt;
 			tcp_flow->tstamp = tstamp;
 			tcp_flow->rto_num = 0;
@@ -711,12 +719,12 @@ void jtcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 			should_write_flow = 1;
 		}
 		tcp_flow->last_seq_num = tp->snd_nxt;
-		tcb = TCP_SKB_CB(skb);
 
 		tcp_flags = TCP_FLAGS(th);
 		spin_lock(&tcp_probe.lock);
-		write_flow(3, tcp_flow, &tuple, tstamp, sk, skb,
-						tcp_flags, length, tcb->seq, tcb->ack_seq, 0);
+		write_flow(LOG_SETUP, tcp_flow, &tuple, tstamp, sk, skb, tcp_flags, length,
+						tcb->seq - tcp_flow->first_ack_num,
+						tcb->ack_seq - tcp_flow->first_seq_num, 0);
 		spin_unlock(&tcp_probe.lock);
 		wake_up(&tcp_probe.wait);
 		
@@ -742,7 +750,7 @@ void jtcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 	struct tcp_tuple tuple;
 	struct tcp_hash_flow *tcp_flow;
 	unsigned int hash;
-	struct tcp_skb_cb *tcb;
+	struct tcp_skb_cb *tcb = TCP_SKB_CB(skb);
 	u8 tcp_flags;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
@@ -792,7 +800,8 @@ void jtcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 					ntohs(tuple.sport), ntohs(tuple.dport)
 				);
 				tcp_flow = init_tcp_hash_flow(&tuple, tstamp, hash);
-				tcp_flow->first_seq_num = tp->snd_nxt; 
+				tcp_flow->first_seq_num = tcb->ack_seq; 
+				tcp_flow->first_ack_num = tcb->seq;
 				tcp_flow->tstamp = tstamp;
 				tcp_flow->rto_num = 0;
 				tcp_flow->user_agent[0] = '\0';
@@ -810,11 +819,11 @@ void jtcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 		if (should_write_flow) {
 			get_user_agent(skb, tcp_flow->user_agent, MAX_AGENT_LEN-1);
 			tcp_flow->last_seq_num = tp->snd_nxt;
-			tcb = TCP_SKB_CB(skb);
 			tcp_flags = TCP_FLAGS(th);
 			spin_lock(&tcp_probe.lock);
-			write_flow(0, tcp_flow, &tuple, tstamp, sk, skb,
-						tcp_flags, length, tcb->seq, tcb->ack_seq, 0);
+			write_flow(LOG_RECV, tcp_flow, &tuple, tstamp, sk, skb, tcp_flags, length,
+						tcb->seq - tcp_flow->first_ack_num,
+						tcb->ack_seq - tcp_flow->first_seq_num, 0);
 			spin_unlock(&tcp_probe.lock);
 			wake_up(&tcp_probe.wait);
 		}
