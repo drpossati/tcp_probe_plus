@@ -85,9 +85,9 @@ class tcp_log_reader(object):
             "recv_buff": int(line[22]),
             "send_buff": int(line[23]),
         }
-        line["user-agent"] = ""
+        result["user-agent"] = ""
         if len(line) >= 25:
-            line["user-agent"] =  " ".join(line[24:])
+            result["user-agent"] =  " ".join(line[24:])
         return result
 
     def read_parse_and_store(self):
@@ -128,6 +128,28 @@ class tcp_log_reader(object):
                     ofp.write(oline + "\n")
                     ofp.flush()
 
+    def read_parse_select_and_store(self, *keys):
+        """ Read data, parse information, and store it into output file
+        Args:
+            keys: A list of tuples containing format string and key names to store into file:
+                (<format str>, <keyname>)
+        """
+        ofname = os.path.join(self.odir, self.oname)
+        with open(self.ifname) as ifp:
+            with open(ofname, "w") as ofp:
+                while True:
+                    line = ifp.readline()
+                    if not line:
+                        break
+                    line = self.parse_line(line)
+                    oline = ""
+                    for fmt_str, keyname in keys:
+                        oline += " "
+                        oline += fmt_str % line[keyname]
+                    ofp.write(oline + "\n")
+                    ofp.flush()
+
+
     def read_and_store(self):
         """ just read data and store it into file
         """
@@ -135,27 +157,33 @@ class tcp_log_reader(object):
         file_size_max = 1 * 1024 * 1024 * 1024
         file_num = 1
         with open(self.ifname) as ifp:
-            while True:
-                ofname = self.oname + (".%d" % file_num)
-                ofname = os.path.join(self.odir, ofname)
-                ofp = open(ofname, "w")
-                flush_num, file_size = 0, 0
+            try:
                 while True:
-                    line = ifp.readline()
+                    ofname = self.oname + (".%d" % file_num)
+                    ofname = os.path.join(self.odir, ofname)
+                    ofp = open(ofname, "w")
+                    flush_num, file_size = 0, 0
+                    while True:
+                        line = ifp.readline()
+                        if not line:
+                            break
+                        ofp.write(line)
+                        file_size += len(line)
+                        flush_num += 1
+                        if flush_num > flush_max:
+                            ofp.flush()
+                            flush_num = 0
+                        if file_size > file_size_max:
+                            break
+                    ofp.close()
                     if not line:
                         break
-                    ofp.write(line)
-                    file_size += len(line)
-                    flush_num += 1
-                    if flush_num > flush_max:
-                        ofp.flush()
-                        flush_num = 0
-                    if file_size > file_size_max:
-                        break
-                ofp.close()
-                if not line:
-                    break
-                file_num += 1
+                    file_num += 1
+            except KeyboardInterrupt:
+                logging.warning("Receive Interrupt Signal\n")
+            finally:
+                if not ofp.closed:
+                    ofp.close()
 
 
 def main():
