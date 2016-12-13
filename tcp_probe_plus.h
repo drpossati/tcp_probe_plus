@@ -81,6 +81,7 @@ enum {
 	LOG_TIMEOUT,
 	LOG_SETUP,
 	LOG_DONE,
+	LOG_PURGE,
 };
 
 struct tcp_log {

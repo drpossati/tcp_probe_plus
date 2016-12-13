@@ -76,21 +76,76 @@ struct timespec ns_to_timespec(const s64 nsec)
 }
 #endif
 
+static int
+write_flow_purge(struct tcp_hash_flow *tcp_flow)
+{
+	int i=0;
+	ktime_t tstamp;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
+	struct timespec ts;
+	getnstimeofday(&ts);
+	tstamp = timespec_to_ktime(ts);
+#else
+	tstamp = ktime_get();
+#endif
+	/* If log fills, just silently drop */
+	if (tcp_probe_avail() > 1) {
+		struct tcp_log *p = tcp_probe.log + tcp_probe.head;
+		p->type = LOG_PURGE;
+		p->tstamp = tstamp;
+		p->saddr = tcp_flow->tuple.saddr;
+		p->sport = tcp_flow->tuple.sport;
+		p->daddr = tcp_flow->tuple.daddr;
+		p->dport = tcp_flow->tuple.dport;
+		p->length = 0;
+		p->seq_num = tcp_flow->first_seq_num;
+		p->ack_num = tcp_flow->first_ack_num;
+		p->snd_nxt = 0;
+		p->snd_una = 0;
+		p->snd_wnd = 0;
+		p->snd_cwnd = 0;
+		p->ssthresh = 0;
+		p->srtt = 0;
+		p->mdev = 0;
+		p->rttvar = 0;
+		p->lost = 0;
+		p->retrans = 0;
+		p->inflight = 0;
+		p->rto = 0;
+		p->frto_counter = 0;
+		p->tcp_flags = 0;
+		p->rqueue = 0;
+		p->wqueue = 0;
+		p->socket_idf = 0;
+		p->rto_num = 0;
+		p->seq_rtt = 0;
+		while (tcp_flow->user_agent[i]) {
+			p->user_agent[i] = tcp_flow->user_agent[i];
+			i++;
+		}
+		tcp_probe.head = (tcp_probe.head + 1) & (bufsize - 1);
+	} else {
+		TCPPROBE_STAT_INC(ack_drop_ring_full);
+	}
+	return 0;
+}
+
 
 void purge_timer_run(unsigned long dummy)
 {
 	struct tcp_hash_flow *flow;
 	struct tcp_hash_flow *temp;
+	ktime_t tstamp;
 	
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
-	struct timespec ts; 
-	ktime_t tstamp;
+	struct timespec ts;
 	getnstimeofday(&ts);
 	tstamp = timespec_to_ktime(ts);
 #else
-	ktime_t tstamp = ktime_get();
+	tstamp = ktime_get();
 #endif
-	
+
 	PRINT_DEBUG("Running purge timer.\n");
 	spin_lock(&tcp_hash_lock);
 	list_for_each_entry_safe(flow, temp, &tcp_flow_list, list) {
@@ -103,12 +158,15 @@ void purge_timer_run(unsigned long dummy)
 				" src_port: %u dst_port: %u\n",
 				&flow->tuple.saddr, &flow->tuple.daddr,
 				ntohs(flow->tuple.sport), ntohs(flow->tuple.dport));
-				// Remove from Hashtable
-				hlist_del(&flow->hlist);
-				// Remove from Global List
-				list_del(&flow->list);
-				// Free memory
-				tcp_hash_flow_free(flow);
+			spin_lock(&tcp_probe.lock);
+			write_flow_purge(flow);
+			spin_unlock(&tcp_probe.lock);
+			// Remove from Hashtable
+			hlist_del(&flow->hlist);
+			// Remove from Global List
+			list_del(&flow->list);
+			// Free memory
+			tcp_hash_flow_free(flow);
 		}
 	}
 	spin_unlock(&tcp_hash_lock);
@@ -124,6 +182,9 @@ void purge_all_flows(void)
 	PRINT_DEBUG("Purging all flows.\n");
 	spin_lock(&tcp_hash_lock);
 	list_for_each_entry_safe(flow, temp, &tcp_flow_list, list) {
+		spin_lock(&tcp_probe.lock);
+		write_flow_purge(flow);
+		spin_unlock(&tcp_probe.lock);
 		// Remove from Hashtable
 		hlist_del(&flow->hlist);
 		// Remove from Global List
@@ -133,7 +194,6 @@ void purge_all_flows(void)
 	}
 	spin_unlock(&tcp_hash_lock);
 }
-
 
 
   /*
@@ -205,9 +265,13 @@ write_flow(int type, struct tcp_hash_flow *tcp_flow, struct tcp_tuple *tuple, kt
 		}
 		p->socket_idf = tcp_flow->first_seq_num;
 		p->rto_num = tcp_flow->rto_num;
-		while (tcp_flow->user_agent[i]) {
-			p->user_agent[i] = tcp_flow->user_agent[i];
-			i++;
+		if (type == LOG_DONE) {
+			while (tcp_flow->user_agent[i]) {
+				p->user_agent[i] = tcp_flow->user_agent[i];
+				i++;
+			}
+		} else {
+			p->user_agent[0] = '\0';
 		}
 		p->seq_num = seq_num;
 		p->ack_num = ack_num;
@@ -238,7 +302,7 @@ void jtcp_done(struct sock *sk)
 
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
-	struct timespec ts; 
+	struct timespec ts;
 	getnstimeofday(&ts);
 	tstamp = timespec_to_ktime(ts);
 #else
@@ -288,7 +352,8 @@ void jtcp_done(struct sock *sk)
 		// Get the other lock and write
 		spin_lock(&tcp_probe.lock);
 		TCPPROBE_STAT_INC(reset_flows);
-		write_flow(LOG_DONE, tcp_flow, &tuple, tstamp, sk, NULL, 0, 0, 0, 0, 0);
+		write_flow(LOG_DONE, tcp_flow, &tuple, tstamp, sk, NULL, 0, 0,
+				tcp_flow->first_seq_num, tcp_flow->first_ack_num, 0);
 		spin_unlock(&tcp_probe.lock);
 		
 		/* Release the flow tuple*/
@@ -389,7 +454,7 @@ int jtcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 	u8 tcp_flags;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
-	struct timespec ts; 
+	struct timespec ts;
 	ktime_t tstamp;
 	getnstimeofday(&ts);
 	tstamp = timespec_to_ktime(ts);
@@ -487,7 +552,7 @@ void jtcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it,
 	struct tcp_skb_cb *tcb = TCP_SKB_CB(skb);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
-	struct timespec ts; 
+	struct timespec ts;
 	ktime_t tstamp;
 	getnstimeofday(&ts);
 	tstamp = timespec_to_ktime(ts);
@@ -585,7 +650,7 @@ void jtcp_retransmit_timer(struct sock *sk)
 
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
-	struct timespec ts; 
+	struct timespec ts;
 	getnstimeofday(&ts);
 	tstamp = timespec_to_ktime(ts);
 #else
@@ -666,7 +731,7 @@ void jtcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	u8 tcp_flags;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
-	struct timespec ts; 
+	struct timespec ts;
 	ktime_t tstamp;
 	getnstimeofday(&ts);
 	tstamp = timespec_to_ktime(ts);
@@ -754,7 +819,7 @@ void jtcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 	u8 tcp_flags;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
-	struct timespec ts; 
+	struct timespec ts;
 	ktime_t tstamp;
 	getnstimeofday(&ts);
 	tstamp = timespec_to_ktime(ts);

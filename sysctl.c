@@ -57,8 +57,8 @@ int debug __read_mostly = 0;
 MODULE_PARM_DESC(debug, "Enable debug messages (Default 0) debug=1, trace=2");
 module_param(debug, int , 0);
 
-int purgetime __read_mostly = 30;
-MODULE_PARM_DESC(purgetime, "Max inactivity in seconds before purging a flow (Default 30 seconds)");
+int purgetime __read_mostly = 300;
+MODULE_PARM_DESC(purgetime, "Max inactivity in seconds before purging a flow (Default 300 seconds)");
 
 struct ctl_table tcpprobe_sysctl_table[] = {
 	{
