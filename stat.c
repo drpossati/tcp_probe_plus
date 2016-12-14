@@ -48,10 +48,6 @@ static int tcpprobe_sprint(char *tbuf, int n)
 		p->type, (unsigned long) tv.tv_sec, (unsigned long) tv.tv_nsec,
 		&p->saddr, ntohs(p->sport), &p->daddr, ntohs(p->dport)
 	);
-	/*copied += scnprintf(tbuf+copied, n-copied, "%u %#x %#x(%u) %#x(%u) %#llx %#x ", 
-		p->length, p->tcp_flags, p->seq_num, p->seq_num, p->ack_num, p->ack_num,
-		p->snd_nxt, p->snd_una
-	);*/
 	copied += scnprintf(tbuf+copied, n-copied, "%u %u %u %u %llu %u ", 
 		p->length, p->tcp_flags, p->seq_num, p->ack_num, p->snd_nxt, p->snd_una
 	);

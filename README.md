@@ -3,7 +3,7 @@
 ## TODO
 
 - [x] Detect Timeout
-- [x] Get `User Agent` for receive packets
+- [x] Get `User Agent` for received packets
 - [x] Detect Retransmissions
 - [x] Probe packets on connection setup
 - [x] Calculate RTT using packet's timestamp
@@ -105,19 +105,28 @@ This repository contains:
 
 The data collected by the LKM is exported through `/proc/net/tcpprobe` and is formatted using the following code:
 
- 	return scnprintf(tbuf, n,
-	 "%lu.%09lu %pI4:%u %pI4:%u %d %#llx %#x %u %u %u %u %u %u %u %u %u %u %u %u %#llx\n",
-	 (unsigned long) tv.tv_sec,
-	 (unsigned long) tv.tv_nsec,
-	 &p->saddr, ntohs(p->sport),
-	 &p->daddr, ntohs(p->dport),
-	 p->length, p->snd_nxt, p->snd_una,
-	 p->snd_cwnd, p->ssthresh, p->snd_wnd, p->srtt,
-	 p->rttvar, p->rto, p->lost, p->retrans, p->inflight, p->frto_counter,
-	 p->rqueue, p->wqueue, p->socket_idf);
+	int copied = 0;
+	copied += scnprintf(tbuf+copied, n-copied, "%d %lu.%09lu %pI4:%u %pI4:%u ", 
+		p->type, (unsigned long) tv.tv_sec, (unsigned long) tv.tv_nsec,
+		&p->saddr, ntohs(p->sport), &p->daddr, ntohs(p->dport)
+	);
+	copied += scnprintf(tbuf+copied, n-copied, "%u %u %u %u %llu %u ", 
+		p->length, p->tcp_flags, p->seq_num, p->ack_num, p->snd_nxt, p->snd_una
+	);
+	copied += scnprintf(tbuf+copied, n-copied, "%u %u %u %u %u %u %u ", 
+		p->snd_cwnd, p->ssthresh, p->snd_wnd, p->srtt, p->rttvar, p->mdev, p->rto
+	);
+	copied += scnprintf(tbuf+copied, n-copied, "%u %u %u %u %u ",
+		p->lost, p->retrans, p->inflight, p->frto_counter, p->rto_num
+	);
+	copied += scnprintf(tbuf+copied, n-copied, "%u %u %llu %s ",
+		p->rqueue, p->wqueue, p->socket_idf, p->user_agent
+	);
+	copied += scnprintf(tbuf+copied, n-copied, "\n");
 
 | Field | Description |
 | ----- | ------------|
+| type | Record type: 0 (recv), 1 (send), 2 (timeout), 3 (conn setup), 4 (tcp done), 5 (purge)|
 | tv.tv_sec | Seconds since tcpprobe loading |
 | tv.tv_nsec | Extra milliseconds since tcpprobe loading |
 | saddr | Source Address |
@@ -125,14 +134,17 @@ The data collected by the LKM is exported through `/proc/net/tcpprobe` and is fo
 | daddr | Destination Address |
 | dport | Destination Port |
 | length | Length of the sampled packet (65535 when this is last sample of a connection)|
+| tcp_flags | The flags in tcp header |
+| seq_num | sequence number in the tcp header |
+| ack_num | ack number in the tcp header |
 | snd_nxt | Sequence number of next packet to be sent |
 | snd_una | Sequence number of last unacknowledged packet |
 | snd_cwnd | Current congestion window size (in number of packets) |
 | ssthresh | Slow-start threshold (in number of packets) |
 | snd_wnd | Receive window size (in number of packets) |
 | srtt | Smoothed rtt (in 8us) |
-| mdev | Medium deviation of rtt (in 4us) |
 | rttvar | Standard deviation of the rtt (in 4us) |
+| mdev | Medium deviation of rtt (in 4us) |
 | rto | duration of retransmit timeout (in ms) |
 | lost | (estimated) Number of lost packets currently (not total). |
 | retrans | Total number of retransmitted packets |
@@ -142,8 +154,7 @@ The data collected by the LKM is exported through `/proc/net/tcpprobe` and is fo
 | rqueue | Number of bytes in the socket read queue |
 | wqueue | Number of bytes in the socket write queue |
 | socket_idf | First sequence number seen for the connection |
-| seq_num | sequence number in the tcp header |
-| ack_num | ack number in the tcp header |
+| user_agent | User-Agent in the HTTP header |
  
 ## Sysctl interface
 
