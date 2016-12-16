@@ -103,24 +103,27 @@ This repository contains:
 
 ## Exported Data
 
-The data collected by the LKM is exported through `/proc/net/tcpprobe` and is formatted using the following code:
+The data collected by the LKM is exported through `/proc/net/tcpprobe` and is formatted using the following code (all numbers are hexadecimal to reduce the volumn of output data):
 
-	int copied = 0;
-	copied += scnprintf(tbuf+copied, n-copied, "%d %lu.%09lu %pI4:%u %pI4:%u ", 
+	copied += scnprintf(tbuf+copied, n-copied, "%x %lx %lx %x %x %x %x ", 
 		p->type, (unsigned long) tv.tv_sec, (unsigned long) tv.tv_nsec,
-		&p->saddr, ntohs(p->sport), &p->daddr, ntohs(p->dport)
+		ntohl(p->saddr), ntohs(p->sport), ntohl(p->daddr), ntohs(p->dport)
 	);
-	copied += scnprintf(tbuf+copied, n-copied, "%u %u %u %u %llu %u ", 
-		p->length, p->tcp_flags, p->seq_num, p->ack_num, p->snd_nxt, p->snd_una
+	copied += scnprintf(tbuf+copied, n-copied, "%x %x %x %x ", 
+		p->length, p->tcp_flags, p->seq_num, p->ack_num
 	);
-	copied += scnprintf(tbuf+copied, n-copied, "%u %u %u %u %u %u %u ", 
-		p->snd_cwnd, p->ssthresh, p->snd_wnd, p->srtt, p->rttvar, p->mdev, p->rto
+	copied += scnprintf(tbuf+copied, n-copied, "%x %llx %x %x ", 
+		p->ca_state, p->snd_nxt, p->snd_una, p->write_seq
 	);
-	copied += scnprintf(tbuf+copied, n-copied, "%u %u %u %u %u ",
-		p->lost, p->retrans, p->inflight, p->frto_counter, p->rto_num
+	copied += scnprintf(tbuf+copied, n-copied, "%x %x %x %x %x %x %x ", 
+		p->snd_cwnd, p->ssthresh, p->snd_wnd, p->srtt, p->mdev, p->rttvar, p->rto
 	);
-	copied += scnprintf(tbuf+copied, n-copied, "%u %u %llu %s ",
-		p->rqueue, p->wqueue, p->socket_idf, p->user_agent
+	copied += scnprintf(tbuf+copied, n-copied, "%x %x %x %x %x %x %x ",
+		p->packets_out, p->lost_out, p->sacked_out, p->retrans_out, p->retrans,
+		p->frto_counter, p->rto_num
+	);
+	copied += scnprintf(tbuf+copied, n-copied, "%x %x %s ",
+		p->wqueue, p->user_agent
 	);
 	copied += scnprintf(tbuf+copied, n-copied, "\n");
 
@@ -137,18 +140,22 @@ The data collected by the LKM is exported through `/proc/net/tcpprobe` and is fo
 | tcp_flags | The flags in tcp header |
 | seq_num | sequence number in the tcp header |
 | ack_num | ack number in the tcp header |
-| snd_nxt | Sequence number of next packet to be sent |
-| snd_una | Sequence number of last unacknowledged packet |
+| ca_state | Congestion Avoidance state |
+| snd_nxt | Sequence number of next packet to be sent (relative to the first seen sequence number)|
+| snd_una | Sequence number of last unacknowledged packet (relative) |
+| write_seq | Tail(+1) of data held in tcp send buffer (relative) |
 | snd_cwnd | Current congestion window size (in number of packets) |
 | ssthresh | Slow-start threshold (in number of packets) |
 | snd_wnd | Receive window size (in number of packets) |
 | srtt | Smoothed rtt (in 8us) |
-| rttvar | Standard deviation of the rtt (in 4us) |
 | mdev | Medium deviation of rtt (in 4us) |
+| rttvar | Standard deviation of the rtt (in 4us) |
 | rto | duration of retransmit timeout (in ms) |
-| lost | (estimated) Number of lost packets currently (not total). |
-| retrans | Total number of retransmitted packets |
-| inflight | Number of packets sent but not yet acked |
+| packets_out | Packets which are "in flight" (actually, in_flight = packets_out - left_out + retrans_out) |
+| lost_out | (estimated) Number of lost packets currently (not total). |
+| sacked_out | # of packets sacked |
+| retrans_out | # of retransmitted but not acked packets |
+| retrans | Total # of retransmitted packets |
 | frto_counter | Number of spurious RTO events (After linux 3.10.0, this value is never a counter) |
 | rto_num | Number of retransmit timeout events |
 | rqueue | Number of bytes in the socket read queue |
@@ -282,7 +289,7 @@ If you leave the hashtable size to be auto-calculated, then it is based on syste
 
 This parameter controls the maximum number of flows that this module will track.
 
-- default: 2,000,000 flows
+- default: 1,000 flows
 - x: maximum number of flows to track
 
 Example:

@@ -86,10 +86,14 @@ enum {
 
 struct tcp_log {
 	/* log type: recv(0), send(1), timeout(2), connection setup(3), tcp_done(4), RTO timeout(5)*/
-	int type;
+	u8 type;
+	u8 ca_state;
+	u8 frto_counter;
+	u8 tcp_flags;
 	ktime_t tstamp;
 	__be32	saddr, daddr;
 	__be16	sport, dport;
+	u16 rto_num;
 	u16 length;
 	u32 seq_num;
 	u32 ack_num;
@@ -97,16 +101,18 @@ struct tcp_log {
 	u32 snd_una;
 	u32 snd_wnd;
 	u32 snd_cwnd;
+	u32 rcv_wnd;
 	u32 ssthresh;
 	u32 srtt;
 	u32 mdev;
 	u32 rttvar;
-	u32 lost;
-	u32 retrans;
-	u32 inflight;
 	u32 rto;
-	u8 frto_counter;
-	u8 tcp_flags;
+	u32 packets_out;
+	u32 lost_out;
+	u32 sacked_out;
+	u32 retrans_out;
+	u32 retrans;
+	u32 write_seq;
 	u32 rqueue;
 	u32 wqueue;
 	u64 socket_idf;
@@ -116,7 +122,6 @@ struct tcp_log {
 	 */
 	/*long seq_rtt_us_tsecr;
 	long seq_rtt_us_skb_mstamp;*/
-	unsigned rto_num;
 	long seq_rtt;
 	char user_agent[MAX_AGENT_LEN];
 };

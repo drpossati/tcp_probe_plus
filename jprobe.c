@@ -93,11 +93,15 @@ write_flow_purge(struct tcp_hash_flow *tcp_flow)
 	if (tcp_probe_avail() > 1) {
 		struct tcp_log *p = tcp_probe.log + tcp_probe.head;
 		p->type = LOG_PURGE;
+		p->ca_state = 0;
+		p->frto_counter = 0;
+		p->tcp_flags = 0;
 		p->tstamp = tstamp;
 		p->saddr = tcp_flow->tuple.saddr;
 		p->sport = tcp_flow->tuple.sport;
 		p->daddr = tcp_flow->tuple.daddr;
 		p->dport = tcp_flow->tuple.dport;
+		p->rto_num = 0;
 		p->length = 0;
 		p->seq_num = tcp_flow->first_seq_num;
 		p->ack_num = tcp_flow->first_ack_num;
@@ -105,20 +109,21 @@ write_flow_purge(struct tcp_hash_flow *tcp_flow)
 		p->snd_una = 0;
 		p->snd_wnd = 0;
 		p->snd_cwnd = 0;
+		p->rcv_wnd = 0;
 		p->ssthresh = 0;
 		p->srtt = 0;
 		p->mdev = 0;
 		p->rttvar = 0;
-		p->lost = 0;
 		p->retrans = 0;
-		p->inflight = 0;
+		p->retrans_out = 0;
+		p->lost_out = 0;
+		p->packets_out = 0;
+		p->sacked_out = 0;
 		p->rto = 0;
-		p->frto_counter = 0;
-		p->tcp_flags = 0;
+		p->write_seq = 0;
 		p->rqueue = 0;
 		p->wqueue = 0;
-		p->socket_idf = 0;
-		p->rto_num = 0;
+		p->socket_idf = tcp_flow->first_seq_num;
 		p->seq_rtt = 0;
 		while (tcp_flow->user_agent[i]) {
 			p->user_agent[i] = tcp_flow->user_agent[i];
@@ -221,6 +226,7 @@ write_flow(int type, struct tcp_hash_flow *tcp_flow, struct tcp_tuple *tuple, kt
 		p->tcp_flags = tcp_flags;
 		p->length = length;
 		/* update the cumulative bytes */
+		p->write_seq = tp->write_seq - tcp_flow->first_seq_num;
 		if (type != LOG_SETUP) {
 			p->snd_nxt = tp->snd_nxt - tcp_flow->first_seq_num;
 			p->snd_una = tp->snd_una - tcp_flow->first_seq_num;
@@ -230,6 +236,7 @@ write_flow(int type, struct tcp_hash_flow *tcp_flow, struct tcp_tuple *tuple, kt
 		}
 		p->snd_cwnd = tp->snd_cwnd;
 		p->snd_wnd = tp->snd_wnd;
+		p->rcv_wnd = tp->rcv_wnd;
 		p->ssthresh = tcp_current_ssthresh(sk);
 	
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
@@ -243,11 +250,15 @@ write_flow(int type, struct tcp_hash_flow *tcp_flow, struct tcp_tuple *tuple, kt
 		p->mdev = tp->mdev_us;
 #endif
 	
-		p->lost = tp->lost_out;
+		p->retrans_out = tp->retrans_out;
+		p->lost_out = tp->lost_out;
+		p->packets_out = tp->packets_out;
+		p->sacked_out = tp->sacked_out;
 		p->retrans = tp->total_retrans;
-		p->inflight = tp->packets_out;
 		/* p->rto = p->srtt + (4 * p->rttvar); */
+
 		p->rto = inet_csk(sk)->icsk_rto;
+		p->ca_state = inet_csk(sk)->icsk_ca_state;
 	
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
 		p->frto_counter = tp->frto_counter;
