@@ -6,6 +6,13 @@ import datetime
 import logging
 import shutil
 
+def ipaddr_ntos(ipaddr):
+    return "%d.%d.%d.%d" % (
+            (ipaddr >> 24) & 0xff,
+            (ipaddr >> 16) & 0xff,
+            (ipaddr >> 8) & 0xff,
+            (ipaddr) & 0xff,
+    )
 
 class tcp_log_reader(object):
     """ Read tcp log from file
@@ -49,45 +56,51 @@ class tcp_log_reader(object):
                     break
                 print line
 
-    def parse_line(self, line):
+    def parse_line(self, line, num_base=16):
         """ Parse a line into dictionary.
+
+        line: A string containing line to be parsed
+        num_base: Base of all numbers
 
         Returns:
             A dictionary containing the data
         """
         result = {}
         line = line.split()
-        result = {
-            "type": int(line[0]),
-            "timestamp": float(line[1]),
-            "srcaddr": line[2].split(":")[0],
-            "srcport": int(line[2].split(":")[1]),
-            "dstaddr": line[3].split(":")[0],
-            "dstport": int(line[3].split(":")[1]),
-            "length": int(line[4]),
-            "flags": int(line[5]),
-            "seq_num": int(line[6]),
-            "ack_num": int(line[7]),
-            "snd_nxt": long(line[8]),
-            "snd_una": int(line[9]),
-            "cwnd": int(line[10]),
-            "ssthreshold": int(line[11]),
-            "recv_wnd": int(line[12]),
-            "srtt": int(line[13]),
-            "rttvar": int(line[14]),
-            "rtt_mdev": int(line[15]),
-            "rto": int(line[16]),
-            "lost_out": int(line[17]),
-            "retrans_num": int(line[18]),
-            "inflight": int(line[19]),
-            "frto_counter": int(line[20]),
-            "rto_num": int(line[21]),
-            "recv_buff": int(line[22]),
-            "send_buff": int(line[23]),
-        }
+        result = {}
+        result["type"] = int(line[0], base=num_base)
+        result["timestamp"] = (int(line[1], base=num_base) +
+                int(line[2], base=num_base) / 1000 / 1000.0 / 1000.0)
+        result["srcaddr"] = int(line[3], base=num_base)
+        result["srcport"] = int(line[4], base=num_base)
+        result["dstaddr"] = int(line[5], base=num_base)
+        result["dstport"] = int(line[6], base=num_base)
+        result["length"] = int(line[7], base=num_base)
+        result["tcp_flags"] = int(line[8], base=num_base)
+        result["seq_num"] = int(line[9], base=num_base)
+        result["ack_num"] = int(line[10], base=num_base)
+        result["ca_state"] = int(line[11], base=num_base)
+        result["snd_nxt"] = long(line[12], base=num_base)
+        result["snd_una"] = int(line[13], base=num_base)
+        result["write_seq"] = int(line[14], base=num_base)
+        result["snd_cwnd"] = int(line[15], base=num_base)
+        result["ssthreshold"] = int(line[16], base=num_base)
+        result["snd_wnd"] = int(line[17], base=num_base)
+        result["srtt"] = int(line[18], base=num_base)
+        result["mdev"] = int(line[19], base=num_base)
+        result["rttvar"] = int(line[20], base=num_base)
+        result["rto"] = int(line[21], base=num_base)
+        result["packets_out"] = int(line[22], base=num_base)
+        result["lost_out"] = int(line[23], base=num_base)
+        result["sacked_out"] = int(line[24], base=num_base)
+        result["retrans_out"] = int(line[25], base=num_base)
+        result["retrans"] = int(line[26], base=num_base)
+        result["frto_counter"] = int(line[27], base=num_base)
+        result["rto_num"] = int(line[28], base=num_base)
+        result["wqueue"] = int(line[29], base=num_base)
         result["user-agent"] = ""
-        if len(line) >= 25:
-            result["user-agent"] =  " ".join(line[24:])
+        if len(line) >= 31:
+            result["user-agent"] =  " ".join(line[30:])
         return result
 
     def read_parse_and_store(self):
@@ -142,6 +155,8 @@ class tcp_log_reader(object):
                     if not line:
                         break
                     line = self.parse_line(line)
+                    result["srcaddr"] = ipaddr_ntos(result["srcaddr"]
+                    result["dstaddr"] = ipaddr_ntos(result["dstaddr"]
                     oline = ""
                     for fmt_str, keyname in keys:
                         oline += " "
@@ -150,11 +165,16 @@ class tcp_log_reader(object):
                     ofp.flush()
 
 
-    def read_and_store(self):
+    def read_and_store(self, file_size_max = (1 << 30), flush_max = 30):
         """ just read data and store it into file
+        Args:
+            file_size_max: A number contaning the maximum bytes of a file. When
+                the log file size is larger than file_size_max, a new file will
+                be created.
+            flush_max: A number representing the maximum number of flush lines.
+                when # of lines in buffer are larger than flush_max, all lines
+                will be flushed into disk.
         """
-        flush_max = 30
-        file_size_max = 1 * 1024 * 1024 * 1024
         file_num = 1
         with open(self.ifname) as ifp:
             try:
