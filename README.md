@@ -151,7 +151,7 @@ The data collected by the LKM is exported through `/proc/net/tcpprobe` and is fo
 | mdev | Medium deviation of rtt (in 4us) |
 | rttvar | Standard deviation of the rtt (in 4us) |
 | rto | duration of retransmit timeout (in ms) |
-| packets_out | Packets which are "in flight" (actually, in_flight = packets_out - left_out + retrans_out) |
+| packets_out | Packets which are "in flight" (actually, in_flight = packets_out + retrans_out - sack_out - lost_out) |
 | lost_out | (estimated) Number of lost packets currently (not total). |
 | sacked_out | # of packets sacked |
 | retrans_out | # of retransmitted but not acked packets |

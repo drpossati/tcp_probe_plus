@@ -155,8 +155,8 @@ class tcp_log_reader(object):
                     if not line:
                         break
                     line = self.parse_line(line)
-                    result["srcaddr"] = ipaddr_ntos(result["srcaddr"]
-                    result["dstaddr"] = ipaddr_ntos(result["dstaddr"]
+                    line["srcaddr"] = ipaddr_ntos(line["srcaddr"])
+                    line["dstaddr"] = ipaddr_ntos(line["dstaddr"])
                     oline = ""
                     for fmt_str, keyname in keys:
                         oline += " "
