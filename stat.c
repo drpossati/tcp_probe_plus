@@ -55,30 +55,21 @@ static int tcpprobe_sprint(char *tbuf, int n)
 	copied += scnprintf(tbuf+copied, n-copied, "%x %x %x %x ", 
 		p->length, p->tcp_flags, p->seq_num, p->ack_num
 	);
-	copied += scnprintf(tbuf+copied, n-copied, "%x %llx %x %x ", 
-		p->ca_state, p->snd_nxt, p->snd_una, p->write_seq
+	copied += scnprintf(tbuf+copied, n-copied, "%x %llx %x %x %x ",
+		p->ca_state, p->snd_nxt, p->snd_una, p->write_seq, p->wqueue
 	);
 	copied += scnprintf(tbuf+copied, n-copied, "%x %x %x %x %x %x %x ", 
 		p->snd_cwnd, p->ssthresh, p->snd_wnd, p->srtt, p->mdev, p->rttvar, p->rto
 	);
-	copied += scnprintf(tbuf+copied, n-copied, "%x %x %x %x %x %x %x ",
+	copied += scnprintf(tbuf+copied, n-copied, "%x %x %x %x %x %x %x",
 		p->packets_out, p->lost_out, p->sacked_out, p->retrans_out, p->retrans,
 		p->frto_counter, p->rto_num
 	);
-	copied += scnprintf(tbuf+copied, n-copied, "%x %s ",
-		p->wqueue, p->user_agent
-	);
+	if (p->user_agent[0] != '\0') {
+		copied += scnprintf(tbuf+copied, n-copied, " %s", p->user_agent);
+	}
 	copied += scnprintf(tbuf+copied, n-copied, "\n");
 	return copied;
-	/*return scnprintf(tbuf, n,
-	"%d %lu.%09lu %pI4:%u %pI4:%u %u %#x %#x %#llx %#x %u %u %u %u %u %u %u %u %u %u %u %u %u %u %#llx %s\n",
-	p->type,
-	(unsigned long) tv.tv_sec, (unsigned long) tv.tv_nsec,
-	&p->saddr, ntohs(p->sport), &p->daddr, ntohs(p->dport),
-	p->length, p->seq_num, p->ack_num, p->snd_nxt, p->snd_una,
-	p->snd_cwnd, p->ssthresh, p->snd_wnd, p->srtt, p->rttvar, p->mdev, p->rto,
-	p->lost, p->retrans, p->inflight, p->frto_counter, p->rto_num,
-	p->rqueue, p->wqueue, p->socket_idf, p->user_agent);*/
 }
 
 static ssize_t tcpprobe_read(struct file *file, char __user *buf,

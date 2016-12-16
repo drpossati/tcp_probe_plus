@@ -410,7 +410,10 @@ get_user_agent(struct sk_buff *skb, char *buff, unsigned buflen) {
 				payload[i+3] == 'r' && payload[i+5] == 'A' && payload[i+6] == 'g') {
 				/* Find User Agent */
 				i += 11;
-				while (i+j < payload_len && j < buflen &&
+				/* delete spaces */
+				while (i < payload_len && payload[i] == ' ') i++;
+				j = 0;
+				while (i+j < payload_len && j < buflen-1 &&
 					payload[i+j] != 0x0d && payload[i+j] != 0x0a) {
 					/* Lets get the user agent*/
 					buff[j] = payload[i+j];
