@@ -797,8 +797,10 @@ void jtcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 			tcp_flow->user_agent[0] = '\0';
 			should_write_flow = 1;
 		}
+		if (tcp_flow->user_agent[0] == '\0') {
+			get_user_agent(skb, tcp_flow->user_agent, MAX_AGENT_LEN-1);
+		}
 		tcp_flow->last_seq_num = tp->snd_nxt;
-
 		tcp_flags = TCP_FLAGS(th);
 		spin_lock(&tcp_probe.lock);
 		write_flow(LOG_SETUP, tcp_flow, &tuple, tstamp, sk, skb, tcp_flags, length,
@@ -896,7 +898,9 @@ void jtcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 			}
 		}
 		if (should_write_flow) {
-			get_user_agent(skb, tcp_flow->user_agent, MAX_AGENT_LEN-1);
+			if (tcp_flow->user_agent[0] == '\0') {
+				get_user_agent(skb, tcp_flow->user_agent, MAX_AGENT_LEN-1);
+			}
 			tcp_flow->last_seq_num = tp->snd_nxt;
 			tcp_flags = TCP_FLAGS(th);
 			spin_lock(&tcp_probe.lock);
