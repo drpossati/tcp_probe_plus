@@ -105,6 +105,7 @@ This repository contains:
 
 The data collected by the LKM is exported through `/proc/net/tcpprobe` and is formatted using the following code (all numbers are hexadecimal to reduce the volumn of output data):
 
+
 	copied += scnprintf(tbuf+copied, n-copied, "%x %lx %lx %x %x %x %x ", 
 		p->type, (unsigned long) tv.tv_sec, (unsigned long) tv.tv_nsec,
 		ntohl(p->saddr), ntohs(p->sport), ntohl(p->daddr), ntohs(p->dport)
@@ -112,20 +113,19 @@ The data collected by the LKM is exported through `/proc/net/tcpprobe` and is fo
 	copied += scnprintf(tbuf+copied, n-copied, "%x %x %x %x ", 
 		p->length, p->tcp_flags, p->seq_num, p->ack_num
 	);
-	copied += scnprintf(tbuf+copied, n-copied, "%x %llx %x %x ", 
-		p->ca_state, p->snd_nxt, p->snd_una, p->write_seq
+	copied += scnprintf(tbuf+copied, n-copied, "%x %llx %x %x %x ",
+		p->ca_state, p->snd_nxt, p->snd_una, p->write_seq, p->wqueue
 	);
 	copied += scnprintf(tbuf+copied, n-copied, "%x %x %x %x %x %x %x ", 
 		p->snd_cwnd, p->ssthresh, p->snd_wnd, p->srtt, p->mdev, p->rttvar, p->rto
 	);
-	copied += scnprintf(tbuf+copied, n-copied, "%x %x %x %x %x %x %x ",
+	copied += scnprintf(tbuf+copied, n-copied, "%x %x %x %x %x %x %x",
 		p->packets_out, p->lost_out, p->sacked_out, p->retrans_out, p->retrans,
 		p->frto_counter, p->rto_num
 	);
-	copied += scnprintf(tbuf+copied, n-copied, "%x %x %s ",
-		p->wqueue, p->user_agent
-	);
-	copied += scnprintf(tbuf+copied, n-copied, "\n");
+	if (p->user_agent[0] != '\0') {
+		copied += scnprintf(tbuf+copied, n-copied, " %s", p->user_agent);
+	}
 
 | Field | Description |
 | ----- | ------------|
