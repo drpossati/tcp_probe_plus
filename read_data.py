@@ -29,12 +29,16 @@ class tcp_log_reader(object):
         self.odir = odir
         self.archive_dir = "archive"
         self.oname = oname
-        self.check_trace_dir()
+        self.stat_file = "/proc/net/stat/tcpprobe_plus"
 
     def check_trace_dir(self):
         """ Check whether trace directory exists. If so, move it the archive directory
         """
-        if os.path.exists(self.odir) and os.listdir(self.odir):
+        if os.path.abspath(self.odir) == os.path.abspath("./"):
+            logging.warning(
+                "'%s' is current path. checking escaped.", self.odir,
+            )
+        elif os.path.exists(self.odir) and os.listdir(self.odir):
             logging.error("'%s' exists!" % self.odir)
             timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
             dst_file = "%s/%s_%s" % (self.archive_dir, self.odir, timestamp)
@@ -106,6 +110,7 @@ class tcp_log_reader(object):
     def read_parse_and_store(self):
         """ Read data, parse information, and store it into output file
         """
+        self.check_trace_dir()
         ofname = os.path.join(self.odir, self.oname)
         with open(self.ifname) as ifp:
             with open(ofname, "w") as ofp:
@@ -147,22 +152,22 @@ class tcp_log_reader(object):
             keys: A list of tuples containing format string and key names to store into file:
                 (<format str>, <keyname>)
         """
+        self.check_trace_dir()
         ofname = os.path.join(self.odir, self.oname)
-        with open(self.ifname) as ifp:
-            with open(ofname, "w") as ofp:
-                while True:
-                    line = ifp.readline()
-                    if not line:
-                        break
-                    line = self.parse_line(line)
-                    line["srcaddr"] = ipaddr_ntos(line["srcaddr"])
-                    line["dstaddr"] = ipaddr_ntos(line["dstaddr"])
-                    oline = ""
-                    for fmt_str, keyname in keys:
-                        oline += " "
-                        oline += fmt_str % line[keyname]
-                    ofp.write(oline + "\n")
-                    ofp.flush()
+        with open(self.ifname) as ifp, open(ofname, "w") as ofp:
+            while True:
+                line = ifp.readline()
+                if not line:
+                    break
+                line = self.parse_line(line)
+                line["srcaddr"] = ipaddr_ntos(line["srcaddr"])
+                line["dstaddr"] = ipaddr_ntos(line["dstaddr"])
+                oline = ""
+                for fmt_str, keyname in keys:
+                    oline += " "
+                    oline += fmt_str % line[keyname]
+                ofp.write(oline + "\n")
+                ofp.flush()
 
 
     def read_and_store(self, file_size_max = (1 << 30), flush_max = 30):
@@ -175,13 +180,18 @@ class tcp_log_reader(object):
                 when # of lines in buffer are larger than flush_max, all lines
                 will be flushed into disk.
         """
+        self.check_trace_dir()
         file_num = 1
         with open(self.ifname) as ifp:
+            open_time = datetime.datetime.now()
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             try:
+                print "Press <Ctrl-C> to stop reading!"
                 while True:
                     ofname = self.oname + (".%d" % file_num)
                     ofname = os.path.join(self.odir, ofname)
                     ofp = open(ofname, "w")
+                    ofp.write("# %s\n" % timestamp)
                     flush_num, file_size = 0, 0
                     while True:
                         line = ifp.readline()
@@ -200,10 +210,17 @@ class tcp_log_reader(object):
                         break
                     file_num += 1
             except KeyboardInterrupt:
-                logging.warning("Receive Interrupt Signal\n")
+                logging.warning("Receive Interrupt Signal.\n")
             finally:
                 if not ofp.closed:
                     ofp.close()
+                shutil.copyfile(
+                    self.stat_file,
+                    os.path.join(
+                        self.odir,
+                        os.path.basename(self.stat_file) + ".stat",
+                    ),
+                )
 
 
 def main():
