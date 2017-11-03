@@ -20,14 +20,14 @@
 
 static int tcpprobe_open(struct inode * inode, struct file * file)
 {
-	struct timespec ts; 
+	struct timespec64 ts; 
 
 	/* Reset (empty) log */
 	spin_lock_bh(&tcp_probe.lock);
 	tcp_probe.head = tcp_probe.tail = 0;
 
 	getnstimeofday(&ts);
-	tcp_probe.start_datetime = timespec_to_ktime(ts);
+	tcp_probe.start_datetime = timespec_to_ktime(timespec64_to_timespec(ts));
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
 	tcp_probe.start = tcp_probe.start_datetime;
 #else
@@ -41,18 +41,18 @@ static int tcpprobe_open(struct inode * inode, struct file * file)
 static int tcpprobe_sprint(char *tbuf, int n)
 {
 	const struct tcp_log *p = tcp_probe.log + tcp_probe.tail;
-	struct timespec tv = ktime_to_timespec(ktime_sub(p->tstamp, tcp_probe.start));
+	struct timespec64 tv = ktime_to_timespec64(ktime_sub(p->tstamp, tcp_probe.start));
 	
 	int copied = 0;
 	/*copied += scnprintf(tbuf+copied, n-copied, "%x %lu.%09lu %pI4:%u %pI4:%u ", 
 		p->type, (unsigned long) tv.tv_sec, (unsigned long) tv.tv_nsec,
 		&p->saddr, ntohs(p->sport), &p->daddr, ntohs(p->dport)
 	);*/
-	copied += scnprintf(tbuf+copied, n-copied, "%x %lx %lx %x %x %x %x ", 
+	copied += scnprintf(tbuf+copied, n-copied, "%x %lu.%09lu %x %x %x %x ", 
 		p->type, (unsigned long) tv.tv_sec, (unsigned long) tv.tv_nsec,
 		ntohl(p->saddr), ntohs(p->sport), ntohl(p->daddr), ntohs(p->dport)
 	);
-	copied += scnprintf(tbuf+copied, n-copied, "%x %x %x %x ", 
+	copied += scnprintf(tbuf+copied, n-copied, "%d %x %x %x ", 
 		p->length, p->tcp_flags, p->seq_num, p->ack_num
 	);
 	copied += scnprintf(tbuf+copied, n-copied, "%x %llx %x %x %x ",
