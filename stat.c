@@ -38,16 +38,17 @@ static int tcpprobe_open(struct inode * inode, struct file * file)
 	return 0;
 }
 
+/* 
 static int tcpprobe_sprint(char *tbuf, int n)
 {
 	const struct tcp_log *p = tcp_probe.log + tcp_probe.tail;
 	struct timespec64 tv = ktime_to_timespec64(ktime_sub(p->tstamp, tcp_probe.start));
 	
 	int copied = 0;
-	/*copied += scnprintf(tbuf+copied, n-copied, "%x %lu.%09lu %pI4:%u %pI4:%u ", 
+	copied += scnprintf(tbuf+copied, n-copied, "%x %lu.%09lu %pI4:%u %pI4:%u ", 
 		p->type, (unsigned long) tv.tv_sec, (unsigned long) tv.tv_nsec,
 		&p->saddr, ntohs(p->sport), &p->daddr, ntohs(p->dport)
-	);*/
+	);
 	copied += scnprintf(tbuf+copied, n-copied, "%x %lu.%09lu %x %x %x %x ", 
 		p->type, (unsigned long) tv.tv_sec, (unsigned long) tv.tv_nsec,
 		ntohl(p->saddr), ntohs(p->sport), ntohl(p->daddr), ntohs(p->dport)
@@ -64,6 +65,33 @@ static int tcpprobe_sprint(char *tbuf, int n)
 	copied += scnprintf(tbuf+copied, n-copied, "%x %x %x %x %x %x %x",
 		p->packets_out, p->lost_out, p->sacked_out, p->retrans_out, p->retrans,
 		p->frto_counter, p->rto_num
+	);
+	if (p->user_agent[0] != '\0') {
+		copied += scnprintf(tbuf+copied, n-copied, " %s", p->user_agent);
+	}
+	copied += scnprintf(tbuf+copied, n-copied, "\n");
+	return copied;
+}
+*/
+
+static int tcpprobe_sprint(char *tbuf, int n)
+{
+	const struct tcp_log *p = tcp_probe.log + tcp_probe.tail;
+	struct timespec64 tv = ktime_to_timespec64(ktime_sub(p->tstamp, tcp_probe.start));
+	
+	int copied = 0;
+	copied += scnprintf(tbuf+copied, n-copied, "%lu.%09lu %pI4:%u %pI4:%u ",
+		(unsigned long) tv.tv_sec, (unsigned long) tv.tv_nsec,
+		&p->saddr, ntohs(p->sport), &p->daddr, ntohs(p->dport)
+	);
+	copied += scnprintf(tbuf+copied, n-copied, "%d %#llx %#x %u %u %u ", 
+		p->length, p->snd_nxt, p->snd_una, p->snd_cwnd, p->ssthresh, p->snd_wnd 
+	);
+	copied += scnprintf(tbuf+copied, n-copied, "%u %u %u ", 
+		 p->srtt, p->rttvar, p->rto
+	);
+	copied += scnprintf(tbuf+copied, n-copied, "%u %u %u %u",
+		p->lost_out, p->retrans_out, p->retrans, p->ca_state
 	);
 	if (p->user_agent[0] != '\0') {
 		copied += scnprintf(tbuf+copied, n-copied, " %s", p->user_agent);
