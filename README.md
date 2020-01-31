@@ -29,7 +29,7 @@ Please review the:
 	- frto_counter: A counter to track the Forward RTO-Recovery algorithm as described in RFC 4138
 	- rqueue: The number of bytes currently waiting to be read in the socket buffer a.ka. recvq
 	- wqueue: The number of bytes currently waiting to be sent in the socket buffer a.k.a. sendq
-	- socket_idf: The first sequence number seen for the connection to identify it. It can be used to detect that the connection has been reset and avoid reporting incorrect throughput. 
+	- socket_idf: The first sequence number seen for the connection to identify it. It can be used to detect that the connection has been reset and avoid reporting incorrect throughput.
 
 - More sampling options added by Lyatiss, Inc.
 	- There are two options
@@ -37,17 +37,17 @@ Please review the:
 		- Sample an ACK only if the congestion window has changed every sampling period
 	- Sampling is done by maintaining a connections table (see the Connection hash table section below for details)
 - Add connection termination detection (reported as a magic value in the length field)
-	- The support for this functionnality is only available for kernel versions >= 2.6.22. Before that, the instrumented method (tcp_done) was defined as an inline method that can't be instrumented through jprobe. 
+	- The support for this functionnality is only available for kernel versions >= 2.6.22. Before that, the instrumented method (tcp_done) was defined as an inline method that can't be instrumented through jprobe.
 
 ## Contents
 This repository contains:
 - `dkms.conf` Config file for dkms
-- `Makefile` Makefile 
+- `Makefile` Makefile
 - `tcp_probe_plus.c` Modified tcp_probe that does the sampling and collects more statistics (NOTE: Works on Linux kernel versions 2.6 and higher)
 - `LICENSE` GPLv2 license
 
 ## Building the module
-1. Copy all the files in this folder to the target directory on your machine, e.g., `/usr/src/tcp_probe_plus` 
+1. Copy all the files in this folder to the target directory on your machine, e.g., `/usr/src/tcp_probe_plus`
 2. (Optional) Install DKMS
 
 	On Debian:
@@ -58,15 +58,15 @@ This repository contains:
 
 	On Debian, execute the following commands to determine and then install the correct kernel headers
 
-		ubuntu:/usr/src# uname -a
+		`ubuntu:/usr/src# uname -a`
 		Linux ubuntu 3.2.0-4-686-pae #1 SMP Ubuntu i686 GNU/Linux
-		ubuntu:/usr/src# apt-get install linux-headers-3.2-0-4-686-pae
+		`ubuntu: /usr/src# apt-get install linux-headers-3.2-0-4-686-pae`
 	
 4. Build and install the LKM
 
 	Using DKMS
-
-		ubuntu@host:/usr/src$ sudo dkms add tcp_probe_plus
+	
+		`ubuntu@host:/usr/src$ sudo dkms add tcp_probe_plus`
 	
 		Creating symlink /var/lib/dkms/tcp_probe_plus/1.1.6/source ->
         	         /usr/src/tcp_probe_plus-1.1.6
@@ -91,8 +91,7 @@ This repository contains:
 		  INSTALL /usr/src/tcp_probe_plus/tcp_probe_plus.ko
 		  DEPMOD  3.7.10-gentoo
 		make[1]: Leaving directory `/usr/src/linux-3.7.10-gentoo'
-		gentoo tcp_probe_plus # 
-	
+		gentoo tcp_probe_plus #
 
 ## Loading the module
  
@@ -105,27 +104,67 @@ This repository contains:
 
 The data collected by the LKM is exported through `/proc/net/tcpprobe` and is formatted using the following code (all numbers are hexadecimal to reduce the volumn of output data):
 
+~~~c
+int copied = 0;
+copied += scnprintf(tbuf+copied, n-copied, "%lu.%09lu %pI4:%u %pI4:%u ",
+	(unsigned long) tv.tv_sec, (unsigned long) tv.tv_nsec,
+	&p->saddr, ntohs(p->sport), &p->daddr, ntohs(p->dport)
+);
+copied += scnprintf(tbuf+copied, n-copied, "%d %#x %#x %u %u %u ",
+	p->length, p->snd_nxt, p->snd_una, p->snd_cwnd, p->ssthresh, p->snd_wnd
+);
+copied += scnprintf(tbuf+copied, n-copied, "%u %u %u ",
+	 p->srtt, p->rttvar, p->rto
+);
+copied += scnprintf(tbuf+copied, n-copied, "%x %x %x %x %x",
+	p->lost_out, p->retrans_out, p->retrans, p->rto_num, p->ca_state
+);
+if (p->user_agent[0] != '\0') {
+	copied += scnprintf(tbuf+copied, n-copied, " %s", p->user_agent);
+~~~
 
-	copied += scnprintf(tbuf+copied, n-copied, "%x %lx %lx %x %x %x %x ", 
-		p->type, (unsigned long) tv.tv_sec, (unsigned long) tv.tv_nsec,
-		ntohl(p->saddr), ntohs(p->sport), ntohl(p->daddr), ntohs(p->dport)
-	);
-	copied += scnprintf(tbuf+copied, n-copied, "%x %x %x %x ", 
-		p->length, p->tcp_flags, p->seq_num, p->ack_num
-	);
-	copied += scnprintf(tbuf+copied, n-copied, "%x %llx %x %x %x ",
-		p->ca_state, p->snd_nxt, p->snd_una, p->write_seq, p->wqueue
-	);
-	copied += scnprintf(tbuf+copied, n-copied, "%x %x %x %x %x %x %x ", 
-		p->snd_cwnd, p->ssthresh, p->snd_wnd, p->srtt, p->mdev, p->rttvar, p->rto
-	);
-	copied += scnprintf(tbuf+copied, n-copied, "%x %x %x %x %x %x %x",
-		p->packets_out, p->lost_out, p->sacked_out, p->retrans_out, p->retrans,
-		p->frto_counter, p->rto_num
-	);
-	if (p->user_agent[0] != '\0') {
-		copied += scnprintf(tbuf+copied, n-copied, " %s", p->user_agent);
-	}
+| Field | Description |
+| ----- | ------------|
+| tv.tv_sec . tv.tv_nsec | Seconds since tcpprobe loading . Extra milliseconds since tcpprobe loading |
+| saddr : sport | Source Address : Source Port |
+| daddr : dport | Destination Address : Destination Port |
+| length | Length of the sampled packet (65535 when this is last sample of a connection) |
+| snd_nxt | Sequence number of next packet to be sent (relative to the first seen sequence number)|
+| snd_una | Sequence number of last unacknowledged packet (relative) |
+| snd_cwnd | Current congestion window size (in number of packets) |
+| ssthresh | Slow-start threshold (in number of packets) |
+| snd_wnd | Receive window size (in number of packets) |
+| srtt | Smoothed rtt (in 8us) |
+| rttvar | Standard deviation of the rtt (in 4us) |
+| rto | duration of retransmit timeout (in ms) |
+| lost_out | (estimated) Number of lost packets currently (not total). |
+| retrans_out | # of retransmitted but not acked packets |
+| retrans | Total # of retransmitted packets |
+| rto_num | Number of retransmit timeout events |
+| ca_state | Congestion Avoidance state |
+| user_agent | User-Agent in the HTTP header |
+
+<!--
+copied += scnprintf(tbuf+copied, n-copied, "%x %lx %lx %x %x %x %x ",
+	p->type, (unsigned long) tv.tv_sec, (unsigned long) tv.tv_nsec,
+	ntohl(p->saddr), ntohs(p->sport), ntohl(p->daddr), ntohs(p->dport)
+);
+copied += scnprintf(tbuf+copied, n-copied, "%x %x %x %x ",
+	p->length, p->tcp_flags, p->seq_num, p->ack_num
+);
+copied += scnprintf(tbuf+copied, n-copied, "%x %llx %x %x %x ",
+	p->ca_state, p->snd_nxt, p->snd_una, p->write_seq, p->wqueue
+);
+copied += scnprintf(tbuf+copied, n-copied, "%x %x %x %x %x %x %x ",
+	p->snd_cwnd, p->ssthresh, p->snd_wnd, p->srtt, p->mdev, p->rttvar, p->rto
+);
+copied += scnprintf(tbuf+copied, n-copied, "%x %x %x %x %x %x %x",
+	p->packets_out, p->lost_out, p->sacked_out, p->retrans_out, p->retrans,
+	p->frto_counter, p->rto_num
+);
+if (p->user_agent[0] != '\0') {
+	copied += scnprintf(tbuf+copied, n-copied, " %s", p->user_agent);
+}
 
 | Field | Description |
 | ----- | ------------|
@@ -162,10 +201,11 @@ The data collected by the LKM is exported through `/proc/net/tcpprobe` and is fo
 | wqueue | Number of bytes in the socket write queue |
 | socket_idf | First sequence number seen for the connection |
 | user_agent | User-Agent in the HTTP header |
- 
+-->
+
 ## Sysctl interface
 
-This LKM offers a sysctl interface to configure it. 
+This LKM offers a sysctl interface to configure it.
 
 ### Configuration
 
@@ -347,9 +387,9 @@ This module offers several statistics about its internal behavior.
 	ubuntu@host:~$ more /proc/net/stat/tcpprobe_plus
 	Flows: active 4 mem 0K
 	Hash: size 4721 mem 36K
-	cpu# hash_stat: <search_flows found new reset>, ack_drop: <purge_in_progress ring_full>, 
+	cpu# hash_stat: <search_flows found new reset>, ack_drop: <purge_in_progress ring_full>,
 	conn_drop: <maxflow_reached memory_alloc_failed>, err: <multiple_reader copy_failed>
-	Total: hash_stat:      0  25877    151    147, ack_drop:      0      0, 
+	Total: hash_stat:      0  25877    151    147, ack_drop:      0      0,
 	conn_drop:      0      0, err:      0      0
 
 Description:
@@ -364,7 +404,7 @@ Description:
 	- search_flows: Number of flows looked up so far in the hash table.
 	- found: Number of flows found in the hash table.
 	- new: Number of new flow entries created so far.
-	- reset: Number of flows entries that have been invalidated because the flows have been closed/reset. 
+	- reset: Number of flows entries that have been invalidated because the flows have been closed/reset.
 - ack_drop
 	- purge_in_progress: Number of ACK packets skipped by this module because flow purging was in progress (NOTE: this requires locking the flow table).
 	- ring_full: Number of ACK packets dropped because of a slow reader (NOTE: User space process reading `/proc/net/tcpprobe`)
