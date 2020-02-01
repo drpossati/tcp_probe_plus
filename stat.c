@@ -84,18 +84,16 @@ static int tcpprobe_sprint(char *tbuf, int n)
 		(unsigned long) tv.tv_sec, (unsigned long) tv.tv_nsec,
 		&p->saddr, ntohs(p->sport), &p->daddr, ntohs(p->dport)
 	);
-	copied += scnprintf(tbuf+copied, n-copied, "%d %#x %#x %u %u %u ",
+	copied += scnprintf(tbuf+copied, n-copied, "%d %#llx %#x %u %u %u ",
 		p->length, p->snd_nxt, p->snd_una, p->snd_cwnd, p->ssthresh, p->snd_wnd
 	);
 	copied += scnprintf(tbuf+copied, n-copied, "%u %u %u ",
 		 p->srtt, p->rttvar, p->rto
 	);
-	copied += scnprintf(tbuf+copied, n-copied, "%x %x %x %x %x",
+	copied += scnprintf(tbuf+copied, n-copied, "%u %u %u %u %u",
 		p->lost_out, p->retrans_out, p->retrans, p->rto_num, p->ca_state
 	);
-	if (p->user_agent[0] != '\0') {
-		copied += scnprintf(tbuf+copied, n-copied, " %s", p->user_agent);
-	}
+	
 	copied += scnprintf(tbuf+copied, n-copied, "\n");
 	
 	return copied;

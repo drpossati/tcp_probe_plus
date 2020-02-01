@@ -110,17 +110,15 @@ copied += scnprintf(tbuf+copied, n-copied, "%lu.%09lu %pI4:%u %pI4:%u ",
 	(unsigned long) tv.tv_sec, (unsigned long) tv.tv_nsec,
 	&p->saddr, ntohs(p->sport), &p->daddr, ntohs(p->dport)
 );
-copied += scnprintf(tbuf+copied, n-copied, "%d %#x %#x %u %u %u ",
+copied += scnprintf(tbuf+copied, n-copied, "%d %#llx %#x %u %u %u ",
 	p->length, p->snd_nxt, p->snd_una, p->snd_cwnd, p->ssthresh, p->snd_wnd
 );
 copied += scnprintf(tbuf+copied, n-copied, "%u %u %u ",
 	 p->srtt, p->rttvar, p->rto
 );
-copied += scnprintf(tbuf+copied, n-copied, "%x %x %x %x %x",
+copied += scnprintf(tbuf+copied, n-copied, "%u %u %u %u %u",
 	p->lost_out, p->retrans_out, p->retrans, p->rto_num, p->ca_state
 );
-if (p->user_agent[0] != '\0') {
-	copied += scnprintf(tbuf+copied, n-copied, " %s", p->user_agent);
 ~~~
 
 | Field | Description |
@@ -142,7 +140,6 @@ if (p->user_agent[0] != '\0') {
 | retrans | Total # of retransmitted packets |
 | rto_num | Number of retransmit timeout events |
 | ca_state | Congestion Avoidance state |
-| user_agent | User-Agent in the HTTP header |
 
 <!--
 copied += scnprintf(tbuf+copied, n-copied, "%x %lx %lx %x %x %x %x ",
